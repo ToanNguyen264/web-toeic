@@ -1,0 +1,113 @@
+name: toeic-vocabulary
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    ports:
+      - "${MYSQL_PORT:-3307}:3306"
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-toeic_vocabulary}
+      MYSQL_USER: ${MYSQL_USER:-toeic_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-toeic_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-toeic_root_password}
+      TZ: Asia/Bangkok
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks: [toeic_network]
+
+  backend:
+    image: toeic-vocabulary-backend:dev
+    build:
+      context: ./toeic-vocabulary-be
+      target: development
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npx prisma generate && npx prisma migrate deploy && npm run dev"
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: mysql://${MYSQL_USER:-toeic_user}:${MYSQL_PASSWORD:-toeic_password}@mysql:3306/${MYSQL_DATABASE:-toeic_vocabulary}
+      DATABASE_HOST: mysql
+      DATABASE_PORT: 3306
+      DATABASE_USER: ${MYSQL_USER:-toeic_user}
+      DATABASE_PASSWORD: ${MYSQL_PASSWORD:-toeic_password}
+      DATABASE_NAME: ${MYSQL_DATABASE:-toeic_vocabulary}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-access-secret-change-before-production-2026}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-local-refresh-secret-change-before-production-2026}
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_DAYS: 30
+      COOKIE_SECURE: "false"
+      AUDIO_STORAGE_DIR: /app/uploads/audio
+      TZ: Asia/Bangkok
+    volumes:
+      - ./toeic-vocabulary-be:/app
+      - backend_node_modules:/app/node_modules
+      - audio_data:/app/uploads/audio
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    init: true
+    networks: [toeic_network]
+
+  frontend:
+    image: toeic-vocabulary-frontend:dev
+    build:
+      context: ./toeic-vocabulary-fe
+      target: development
+    restart: unless-stopped
+    working_dir: /app
+    command: npm run dev -- --host 0.0.0.0
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      NODE_ENV: development
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000/api}
+      CHOKIDAR_USEPOLLING: "true"
+      NPM_CONFIG_UPDATE_NOTIFIER: "false"
+      TZ: Asia/Bangkok
+    volumes:
+      - ./toeic-vocabulary-fe:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:5173/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    init: true
+    networks: [toeic_network]
+
+volumes:
+  mysql_data:
+    name: toeic_vocabulary_mysql_data
+  audio_data:
+    name: toeic_vocabulary_audio_data
+  backend_node_modules:
+    name: toeic_vocabulary_backend_node_modules
+  frontend_node_modules:
+    name: toeic_vocabulary_frontend_node_modules
+
+networks:
+  toeic_network:
+    name: toeic_vocabulary_network
+    driver: bridge
+

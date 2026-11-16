@@ -1,0 +1,10 @@
+.env
+*.log
+toeic-vocabulary-be/node_modules/
+toeic-vocabulary-be/dist/
+toeic-vocabulary-be/src/generated/
+toeic-vocabulary-be/uploads/
+toeic-vocabulary-fe/node_modules/
+toeic-vocabulary-fe/dist/
+toeic-vocabulary-fe/.env.local
+
