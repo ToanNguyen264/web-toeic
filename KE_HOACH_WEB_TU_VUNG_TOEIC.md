@@ -52,14 +52,15 @@ Dự án chia rõ hai thư mục frontend/backend. Không sử dụng Supabase. 
 ```text
 web toeic/
 ├── docker-compose.yml
-├── .env.example
 ├── README.md
 ├── KE_HOACH_WEB_TU_VUNG_TOEIC.md
 ├── toeic-vocabulary-fe/
+│   ├── .env
 │   ├── src/
 │   ├── Dockerfile
 │   └── package.json
 └── toeic-vocabulary-be/
+    ├── .env
     ├── src/
     ├── prisma/
     ├── docs/openapi.yaml
@@ -115,6 +116,7 @@ Quan hệ có cascade delete từ `users` tới refresh token và vocabulary.
 - `PUT /api/vocabularies/:id`
 - `DELETE /api/vocabularies/:id`
 - `GET /api/vocabularies/:id/audio`
+- `POST /api/ai/audio`: tạo MP3 từ từ tiếng Anh bằng ElevenLabs; yêu cầu đăng nhập.
 
 Chi tiết request, response và lỗi được duy trì tại `toeic-vocabulary-be/docs/openapi.yaml`.
 
@@ -136,9 +138,10 @@ Backend chỉ khởi động sau khi MySQL healthy; frontend chỉ khởi độn
 
 ## 9. Tiêu chí hoàn thành
 
-- Lint, unit test, TypeScript build và audit dependency đều đạt ở frontend/backend.
+- Lint, TypeScript build và audit dependency đều đạt ở frontend/backend.
 - Docker build và healthcheck đạt cho cả ba service.
 - Kiểm thử thực tế được: đăng ký, đăng nhập, refresh, CRUD từ vựng, upload/phát/thay/xóa audio, tìm kiếm, kiểm tra trùng và đăng xuất.
+- Có thể tạo audio AI, nghe thử rồi lưu bằng đúng luồng upload hiện có; API key chỉ tồn tại ở backend.
 - Tài khoản thứ hai không thể đọc hay phát audio của tài khoản thứ nhất.
 - Không còn file, dependency hoặc tài liệu Supabase/Nex Chat trong dự án.
 
@@ -149,4 +152,12 @@ Backend chỉ khởi động sau khi MySQL healthy; frontend chỉ khởi độn
 - Flashcard, spaced repetition và quiz.
 - Object storage S3-compatible khi triển khai nhiều backend instance.
 - Rate limiting, backup tự động, HTTPS và CI/CD cho production.
+
+## 11. Nâng cấp audio AI bằng ElevenLabs
+
+- Modal thêm/sửa từ vựng có nút tạo audio từ nội dung cột tiếng Anh.
+- Frontend nhận MP3 dưới dạng blob, chuyển thành `File` để xem trước và tái sử dụng luồng lưu audio hiện có.
+- Backend giữ `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` và model trong environment; không gửi khóa sang trình duyệt.
+- Endpoint giới hạn văn bản 150 ký tự, timeout 15 giây, kiểm tra MIME/kích thước phản hồi và chuẩn hóa lỗi từ nhà cung cấp.
+- Audio chỉ trở thành dữ liệu lâu dài sau khi người dùng bấm lưu từ vựng; vì vậy không cần đổi schema MySQL.
 

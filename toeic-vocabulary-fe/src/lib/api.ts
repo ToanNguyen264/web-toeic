@@ -69,19 +69,42 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retryA
   return parseResponse<T>(response);
 }
 
-export async function fetchProtectedBlob(path: string) {
-  const makeRequest = () => fetch(`${API_BASE_URL}${path}`, {
-    credentials: "include",
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-  });
-  let response = await makeRequest();
+export async function fetchProtectedBlob(path: string, init: RequestInit = {}) {
+  const makeRequest = () => {
+    const headers = new Headers(init.headers);
+    if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+    if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    return fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      credentials: "include",
+      headers,
+    });
+  };
+
+  let response: Response;
+  try {
+    response = await makeRequest();
+  } catch {
+    throw new ApiError("Không thể kết nối tới máy chủ.", 0, "NETWORK_ERROR");
+  }
   if (response.status === 401) {
     await refreshSession();
-    response = await makeRequest();
+    try {
+      response = await makeRequest();
+    } catch {
+      throw new ApiError("Không thể kết nối tới máy chủ.", 0, "NETWORK_ERROR");
+    }
   }
   if (!response.ok) {
-    const body = await parseResponse<{ message?: string }>(response);
-    throw new ApiError(body.message || "Không thể tải audio.", response.status);
+    const body = await parseResponse<{ message?: string; code?: string; details?: unknown }>(response);
+    throw new ApiError(
+      body.message || "Không thể tải audio.",
+      response.status,
+      body.code,
+      body.details,
+    );
   }
   return response.blob();
 }

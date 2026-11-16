@@ -4,14 +4,13 @@ Giao diện React/Vite/TypeScript cho kho từ vựng cá nhân. Frontend gọi 
 
 ## Chạy local
 
-1. Sao chép `.env.example` thành `.env.local` nếu API không chạy tại `http://localhost:3000/api`.
+1. Chỉnh `.env` nếu API không chạy tại `http://localhost:3000/api`.
 2. `npm install`
 3. `npm run dev`
 
 ## Kiểm tra
 
 - `npm run lint`
-- `npm run test`
 - `npm run build`
 - `npm audit`
 

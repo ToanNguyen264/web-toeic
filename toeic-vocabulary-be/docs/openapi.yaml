@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: TOEIC Vocabulary API
-  version: 1.0.0
+  version: 1.1.0
   description: API xác thực, quản lý từ vựng cá nhân và audio phát âm.
 servers:
   - url: http://localhost:3000/api
@@ -9,6 +9,7 @@ security: []
 tags:
   - name: System
   - name: Auth
+  - name: AI Audio
   - name: Vocabularies
 paths:
   /health:
@@ -164,6 +165,35 @@ paths:
             audio/ogg: { schema: { type: string, format: binary } }
             audio/webm: { schema: { type: string, format: binary } }
         "404": { $ref: "#/components/responses/NotFound" }
+  /ai/audio:
+    post:
+      tags: [AI Audio]
+      summary: Tạo file MP3 phát âm tiếng Anh bằng ElevenLabs
+      description: File trả về được giữ tạm ở trình duyệt và chỉ được lưu khi người dùng lưu từ vựng.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text]
+              properties:
+                text: { type: string, minLength: 1, maxLength: 150, examples: [opportunity] }
+      responses:
+        "200":
+          description: Audio MP3 đã tạo
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            audio/mpeg: { schema: { type: string, format: binary } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/ServiceError" }
+        "502": { $ref: "#/components/responses/ServiceError" }
+        "503": { $ref: "#/components/responses/ServiceError" }
+        "504": { $ref: "#/components/responses/ServiceError" }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -258,5 +288,8 @@ components:
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     NotFound:
       description: Không tìm thấy tài nguyên thuộc tài khoản hiện tại
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    ServiceError:
+      description: Dịch vụ tạo audio không sẵn sàng, hết hạn mức hoặc phản hồi lỗi
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
 

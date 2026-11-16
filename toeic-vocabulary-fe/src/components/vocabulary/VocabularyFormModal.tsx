@@ -1,4 +1,4 @@
-import { FileAudio, Headphones, UploadCloud, X } from "lucide-react";
+import { FileAudio, Headphones, UploadCloud, WandSparkles, X } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -10,6 +10,8 @@ import type {
   Vocabulary,
   VocabularyFormValues,
 } from "../../types/vocabulary";
+import { generateVocabularyAudio } from "../../services/tts.service";
+import { toUserMessage } from "../../utils/errors";
 import {
   cleanText,
   formatFileSize,
@@ -46,6 +48,7 @@ export function VocabularyFormModal({
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeCurrentAudio, setRemoveCurrentAudio] = useState(false);
+  const [generatingAudio, setGeneratingAudio] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -74,6 +77,40 @@ export function VocabularyFormModal({
     setFile(event.target.files?.[0] ?? null);
   }
 
+  async function handleGenerateAudio() {
+    const text = cleanText(englishWord);
+    if (!text) {
+      setErrors((current) => ({
+        ...current,
+        englishWord: "Vui lòng nhập từ tiếng Anh trước khi tạo audio.",
+      }));
+      return;
+    }
+
+    setGeneratingAudio(true);
+    setErrors((current) => ({ ...current, englishWord: undefined, audio: undefined }));
+    try {
+      const blob = await generateVocabularyAudio(text);
+      const safeName =
+        text
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "") || "pronunciation";
+      setFile(
+        new File([blob], `${safeName}.mp3`, {
+          type: blob.type || "audio/mpeg",
+        }),
+      );
+    } catch (error) {
+      setErrors((current) => ({
+        ...current,
+        audio: toUserMessage(error, "Không thể tạo audio. Vui lòng thử lại."),
+      }));
+    } finally {
+      setGeneratingAudio(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const fieldErrors = validateVocabularyFields(englishWord, vietnameseMeaning);
@@ -98,7 +135,9 @@ export function VocabularyFormModal({
       open
       title={vocabulary ? "Chỉnh sửa từ vựng" : "Thêm từ mới"}
       description="Lưu từ, nghĩa và file phát âm để nghe lại bất cứ lúc nào."
-      onClose={onClose}
+      onClose={() => {
+        if (!loading && !generatingAudio) onClose();
+      }}
       size="lg"
     >
       <form onSubmit={handleSubmit} noValidate>
@@ -217,6 +256,21 @@ export function VocabularyFormModal({
               <p className="mt-1.5 text-xs font-medium text-rose-600">{errors.audio}</p>
             )}
 
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-3 w-full border-indigo-200 text-indigo-700 dark:border-indigo-800 dark:text-indigo-300"
+              onClick={handleGenerateAudio}
+              loading={generatingAudio}
+              disabled={loading || !cleanText(englishWord)}
+            >
+              {!generatingAudio && <WandSparkles className="h-4 w-4" />}
+              {audioFile ? "Tạo lại audio bằng AI" : "Tạo audio bằng AI"}
+            </Button>
+            <p className="mt-1.5 text-center text-xs text-slate-400">
+              Tạo phát âm tiếng Anh bằng giọng AI đã cấu hình, sau đó lưu cùng từ vựng.
+            </p>
+
             {vocabulary?.audio_path && !audioFile && (
               <label className="mt-3 flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
                 <input
@@ -235,10 +289,10 @@ export function VocabularyFormModal({
         </div>
 
         <div className="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50/70 px-5 py-4 dark:border-slate-800 dark:bg-slate-950/40 sm:flex-row sm:justify-end sm:px-6">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={loading}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={loading || generatingAudio}>
             Hủy
           </Button>
-          <Button type="submit" loading={loading}>
+          <Button type="submit" loading={loading} disabled={generatingAudio}>
             {vocabulary ? "Lưu thay đổi" : "Thêm từ vựng"}
           </Button>
         </div>
