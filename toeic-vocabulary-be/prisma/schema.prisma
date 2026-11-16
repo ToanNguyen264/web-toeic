@@ -48,12 +48,14 @@ model Vocabulary {
   exampleAudioName  String?  @map("example_audio_name") @db.VarChar(255)
   exampleAudioType  String?  @map("example_audio_type") @db.VarChar(100)
   exampleAudioSize  BigInt?  @map("example_audio_size") @db.UnsignedBigInt
+  isLearned         Boolean  @default(false) @map("is_learned")
   createdAt         DateTime @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt         DateTime @updatedAt @map("updated_at") @db.DateTime(3)
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, normalizedWord])
+  @@index([userId, isLearned, createdAt(sort: Desc)])
   @@map("vocabularies")
 }
 

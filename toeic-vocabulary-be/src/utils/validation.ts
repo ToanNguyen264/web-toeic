@@ -33,6 +33,7 @@ export const vocabularyFieldsSchema = z
 
 export const listQuerySchema = z.object({
   search: z.string().max(150).default("").transform(cleanText),
+  status: z.enum(["all", "unlearned", "learned"]).default("all"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -43,6 +44,8 @@ export const duplicateQuerySchema = z.object({
 });
 
 export const idParamsSchema = z.object({ id: z.string().uuid() });
+
+export const learnedStatusSchema = z.object({ isLearned: z.boolean() });
 
 export function cleanText(value: string) {
   return value.normalize("NFKC").trim().replace(/\s+/g, " ");

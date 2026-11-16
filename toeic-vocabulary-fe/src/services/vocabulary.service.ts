@@ -1,5 +1,10 @@
 import { apiRequest, fetchProtectedBlob } from "../lib/api";
-import type { Vocabulary, VocabularyFormValues, VocabularyPage } from "../types/vocabulary";
+import type {
+  Vocabulary,
+  VocabularyFormValues,
+  VocabularyPage,
+  VocabularyStatus,
+} from "../types/vocabulary";
 import { PAGE_SIZE } from "../utils/validation";
 
 type ListOptions = {
@@ -7,6 +12,7 @@ type ListOptions = {
   search: string;
   page: number;
   pageSize?: number;
+  status: VocabularyStatus;
 };
 
 function formDataFor(values: VocabularyFormValues) {
@@ -22,10 +28,31 @@ function formDataFor(values: VocabularyFormValues) {
   return formData;
 }
 
-export async function listVocabularies({ search, page, pageSize = PAGE_SIZE }: ListOptions): Promise<VocabularyPage> {
-  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+export async function listVocabularies({ search, page, pageSize = PAGE_SIZE, status }: ListOptions): Promise<VocabularyPage> {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+    status,
+  });
   if (search) params.set("search", search);
   return apiRequest<VocabularyPage>(`/vocabularies?${params}`);
+}
+
+export async function listAllVocabularies(
+  userId: string,
+  search: string,
+  status: VocabularyStatus,
+) {
+  const pageSize = 100;
+  const firstPage = await listVocabularies({ userId, search, status, page: 1, pageSize });
+  const items = [...firstPage.items];
+  const totalPages = Math.ceil(firstPage.total / pageSize);
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    const result = await listVocabularies({ userId, search, status, page, pageSize });
+    items.push(...result.items);
+  }
+  return items;
 }
 
 export async function hasDuplicateVocabulary(_userId: string, englishWord: string, excludeId?: string) {
@@ -53,6 +80,17 @@ export async function updateVocabulary(_userId: string, current: Vocabulary, val
 
 export async function deleteVocabulary(_userId: string, vocabulary: Vocabulary) {
   await apiRequest<void>(`/vocabularies/${vocabulary.id}`, { method: "DELETE" });
+}
+
+export async function setVocabularyLearned(vocabularyId: string, isLearned: boolean) {
+  const result = await apiRequest<{ item: Vocabulary }>(
+    `/vocabularies/${vocabularyId}/learned`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ isLearned }),
+    },
+  );
+  return result.item;
 }
 
 export async function getAudioUrl(vocabularyId: string, kind: "word" | "example" = "word") {

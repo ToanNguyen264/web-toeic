@@ -14,6 +14,7 @@ export type Vocabulary = {
   example_audio_name: string | null;
   example_audio_type: string | null;
   example_audio_size: number | null;
+  is_learned: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -34,4 +35,10 @@ export type VocabularyPage = {
   total: number;
   page: number;
   pageSize: number;
+  stats: {
+    unlearned: number;
+    learned: number;
+  };
 };
+
+export type VocabularyStatus = "all" | "unlearned" | "learned";

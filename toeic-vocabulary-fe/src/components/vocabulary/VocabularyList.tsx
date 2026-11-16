@@ -1,5 +1,14 @@
-import { BookOpenText, Edit3, Inbox, MoreHorizontal, Trash2, Volume2 } from "lucide-react";
-import type { Vocabulary } from "../../types/vocabulary";
+import {
+  BookOpenText,
+  Edit3,
+  Inbox,
+  LoaderCircle,
+  MoreHorizontal,
+  Star,
+  Trash2,
+  Volume2,
+} from "lucide-react";
+import type { Vocabulary, VocabularyStatus } from "../../types/vocabulary";
 import { formatFileSize } from "../../utils/validation";
 import { AudioButton } from "./AudioButton";
 
@@ -7,10 +16,14 @@ type VocabularyListProps = {
   items: Vocabulary[];
   loading: boolean;
   search: string;
+  status: VocabularyStatus;
   activeAudioId: string | null;
+  playlistPlaying: boolean;
   onActivateAudio: (id: string | null) => void;
   onEdit: (vocabulary: Vocabulary) => void;
   onDelete: (vocabulary: Vocabulary) => void;
+  onToggleLearned: (vocabulary: Vocabulary) => void;
+  learnedUpdatingId: string | null;
   onAdd: () => void;
 };
 
@@ -37,10 +50,14 @@ export function VocabularyList({
   items,
   loading,
   search,
+  status,
   activeAudioId,
+  playlistPlaying,
   onActivateAudio,
   onEdit,
   onDelete,
+  onToggleLearned,
+  learnedUpdatingId,
   onAdd,
 }: VocabularyListProps) {
   if (loading) return <VocabularySkeleton />;
@@ -52,14 +69,22 @@ export function VocabularyList({
           {search ? <Inbox className="h-7 w-7" /> : <Volume2 className="h-7 w-7" />}
         </div>
         <h3 className="mt-5 text-lg font-extrabold text-slate-900 dark:text-white">
-          {search ? "Không tìm thấy từ phù hợp" : "Kho từ vựng đang trống"}
+          {search
+            ? "Không tìm thấy từ phù hợp"
+            : status === "learned"
+              ? "Chưa có từ đã thuộc"
+              : status === "unlearned"
+                ? "Danh sách chưa thuộc đang trống"
+                : "Kho từ vựng đang trống"}
         </h3>
         <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
           {search
             ? "Thử một từ khóa khác hoặc xóa bộ lọc tìm kiếm."
-            : "Thêm từ đầu tiên cùng file phát âm để bắt đầu luyện nghe."}
+            : status === "learned"
+              ? "Bấm biểu tượng ngôi sao ở danh sách chưa thuộc để chuyển từ sang đây."
+              : "Thêm từ đầu tiên cùng file phát âm để bắt đầu luyện nghe."}
         </p>
-        {!search && (
+        {!search && status !== "learned" && (
           <button
             type="button"
             onClick={onAdd}
@@ -89,14 +114,42 @@ export function VocabularyList({
             {items.map((item) => (
               <tr key={item.id} className="group transition hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20">
                 <td className="px-6 py-5 align-top">
-                  <p className="font-extrabold text-slate-900 dark:text-white">
-                    {item.english_word}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    {new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(
-                      new Date(item.created_at),
-                    )}
-                  </p>
+                  <div className="flex items-start gap-3">
+                    <button
+                      type="button"
+                      onClick={() => onToggleLearned(item)}
+                      disabled={learnedUpdatingId === item.id}
+                      className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg transition disabled:cursor-wait disabled:opacity-60 ${
+                        item.is_learned
+                          ? "bg-amber-100 text-amber-500 dark:bg-amber-950 dark:text-amber-300"
+                          : "bg-slate-100 text-slate-400 hover:bg-amber-50 hover:text-amber-500 dark:bg-slate-800 dark:hover:bg-amber-950"
+                      }`}
+                      aria-label={
+                        item.is_learned
+                          ? `Đánh dấu ${item.english_word} là chưa thuộc`
+                          : `Đánh dấu ${item.english_word} là đã thuộc`
+                      }
+                      title={item.is_learned ? "Chuyển về chưa thuộc" : "Đánh dấu đã thuộc"}
+                    >
+                      {learnedUpdatingId === item.id ? (
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Star
+                          className={`h-4 w-4 ${item.is_learned ? "fill-current" : ""}`}
+                        />
+                      )}
+                    </button>
+                    <div className="min-w-0">
+                      <p className="font-extrabold text-slate-900 dark:text-white">
+                        {item.english_word}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(
+                          new Date(item.created_at),
+                        )}
+                      </p>
+                    </div>
+                  </div>
                 </td>
                 <td className="max-w-md px-6 py-5 align-top text-sm leading-6 text-slate-600 dark:text-slate-300">
                   {item.vietnamese_meaning}
@@ -116,6 +169,9 @@ export function VocabularyList({
                         path={item.example_audio_path}
                         name={item.example_audio_name}
                         isActive={activeAudioId === `${item.id}:example`}
+                        externallyPlaying={
+                          playlistPlaying && activeAudioId === `${item.id}:example`
+                        }
                         onActivate={onActivateAudio}
                         compact
                       />
@@ -132,6 +188,7 @@ export function VocabularyList({
                     path={item.audio_path}
                     name={item.audio_name}
                     isActive={activeAudioId === item.id}
+                    externallyPlaying={playlistPlaying && activeAudioId === item.id}
                     onActivate={onActivateAudio}
                   />
                   {item.audio_size ? (
@@ -172,13 +229,36 @@ export function VocabularyList({
         {items.map((item) => (
           <article key={item.id} className="p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+              <div className="flex min-w-0 items-start gap-3">
+                <button
+                  type="button"
+                  onClick={() => onToggleLearned(item)}
+                  disabled={learnedUpdatingId === item.id}
+                  className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl transition disabled:cursor-wait disabled:opacity-60 ${
+                    item.is_learned
+                      ? "bg-amber-100 text-amber-500 dark:bg-amber-950 dark:text-amber-300"
+                      : "bg-slate-100 text-slate-400 dark:bg-slate-800"
+                  }`}
+                  aria-label={
+                    item.is_learned
+                      ? `Đánh dấu ${item.english_word} là chưa thuộc`
+                      : `Đánh dấu ${item.english_word} là đã thuộc`
+                  }
+                >
+                  {learnedUpdatingId === item.id ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Star className={`h-4 w-4 ${item.is_learned ? "fill-current" : ""}`} />
+                  )}
+                </button>
+                <div className="min-w-0">
                 <h3 className="break-words text-lg font-extrabold text-slate-900 dark:text-white">
                   {item.english_word}
                 </h3>
                 <p className="mt-1 break-words text-sm leading-6 text-slate-600 dark:text-slate-300">
                   {item.vietnamese_meaning}
                 </p>
+                </div>
               </div>
               <MoreHorizontal className="mt-1 h-5 w-5 shrink-0 text-slate-300" />
             </div>
@@ -200,6 +280,9 @@ export function VocabularyList({
                         path={item.example_audio_path}
                         name={item.example_audio_name}
                         isActive={activeAudioId === `${item.id}:example`}
+                        externallyPlaying={
+                          playlistPlaying && activeAudioId === `${item.id}:example`
+                        }
                         onActivate={onActivateAudio}
                         compact
                       />
@@ -214,6 +297,7 @@ export function VocabularyList({
                 path={item.audio_path}
                 name={item.audio_name}
                 isActive={activeAudioId === item.id}
+                externallyPlaying={playlistPlaying && activeAudioId === item.id}
                 onActivate={onActivateAudio}
               />
               <div className="flex shrink-0 gap-1">

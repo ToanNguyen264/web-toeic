@@ -2,6 +2,8 @@
 
 Ứng dụng web lưu từ tiếng Anh, nghĩa tiếng Việt, ví dụ theo chủ đề TOEIC và audio luyện nghe theo từng tài khoản. Gemini tạo câu ví dụ; ElevenLabs tạo audio phát âm và audio song ngữ có khoảng nghỉ 1,5 giây.
 
+Từ vựng được chia thành hai nhóm **Chưa thuộc** và **Đã thuộc**. Người dùng bấm ngôi sao để chuyển trạng thái; chế độ **Nghe tất cả** phát toàn bộ audio hợp lệ trong nhóm đang mở, không bị giới hạn bởi trang phân trang hiện tại.
+
 ## Cấu trúc
 
 - `toeic-vocabulary-fe`: React + Vite + TypeScript.

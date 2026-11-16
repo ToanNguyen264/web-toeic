@@ -9,6 +9,7 @@ import { vocabularyDto } from "../utils/dto.js";
 import {
   duplicateQuerySchema,
   idParamsSchema,
+  learnedStatusSchema,
   listQuerySchema,
   normalizeEnglishWord,
   vocabularyFieldsSchema,
@@ -21,6 +22,7 @@ vocabularyRouter.get("/", async (req, res) => {
   const query = listQuerySchema.parse(req.query);
   const where = {
     userId: req.auth!.userId,
+    ...(query.status === "all" ? {} : { isLearned: query.status === "learned" }),
     ...(query.search
       ? {
           OR: [
@@ -32,7 +34,7 @@ vocabularyRouter.get("/", async (req, res) => {
         }
       : {}),
   };
-  const [items, total] = await prisma.$transaction([
+  const [items, total, unlearned, learned] = await prisma.$transaction([
     prisma.vocabulary.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -40,8 +42,20 @@ vocabularyRouter.get("/", async (req, res) => {
       take: query.pageSize,
     }),
     prisma.vocabulary.count({ where }),
+    prisma.vocabulary.count({
+      where: { userId: req.auth!.userId, isLearned: false },
+    }),
+    prisma.vocabulary.count({
+      where: { userId: req.auth!.userId, isLearned: true },
+    }),
   ]);
-  res.json({ items: items.map(vocabularyDto), total, page: query.page, pageSize: query.pageSize });
+  res.json({
+    items: items.map(vocabularyDto),
+    total,
+    page: query.page,
+    pageSize: query.pageSize,
+    stats: { unlearned, learned },
+  });
 });
 
 vocabularyRouter.get("/check-duplicate", async (req, res) => {
@@ -55,6 +69,24 @@ vocabularyRouter.get("/check-duplicate", async (req, res) => {
     select: { id: true },
   });
   res.json({ duplicate: Boolean(item) });
+});
+
+vocabularyRouter.patch("/:id/learned", async (req, res) => {
+  const { id } = idParamsSchema.parse(req.params);
+  const { isLearned } = learnedStatusSchema.parse(req.body);
+  const current = await prisma.vocabulary.findFirst({
+    where: { id, userId: req.auth!.userId },
+    select: { id: true },
+  });
+  if (!current) {
+    throw new AppError(404, "Không tìm thấy từ vựng.", "VOCABULARY_NOT_FOUND");
+  }
+
+  const vocabulary = await prisma.vocabulary.update({
+    where: { id },
+    data: { isLearned },
+  });
+  res.json({ item: vocabularyDto(vocabulary) });
 });
 
 vocabularyRouter.post("/", uploadAudio, async (req, res) => {

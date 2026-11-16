@@ -125,6 +125,7 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: search, in: query, schema: { type: string, maxLength: 150 } }
+        - { name: status, in: query, schema: { type: string, enum: [all, unlearned, learned], default: all } }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses:
@@ -147,6 +148,26 @@ paths:
         "201": { $ref: "#/components/responses/VocabularySuccess" }
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /vocabularies/{id}/learned:
+    patch:
+      tags: [Vocabularies]
+      summary: Đánh dấu từ vựng là đã thuộc hoặc chưa thuộc
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/VocabularyId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [isLearned]
+              properties:
+                isLearned: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/VocabularySuccess" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /vocabularies/check-duplicate:
     get:
       tags: [Vocabularies]
@@ -362,7 +383,7 @@ components:
         exampleAudio: { type: string, format: binary, description: "Audio ví dụ song ngữ, tối đa 5 MB." }
     Vocabulary:
       type: object
-      required: [id, user_id, english_word, normalized_word, vietnamese_meaning, created_at, updated_at]
+      required: [id, user_id, english_word, normalized_word, vietnamese_meaning, is_learned, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
@@ -379,16 +400,23 @@ components:
         example_audio_name: { type: [string, "null"] }
         example_audio_type: { type: [string, "null"] }
         example_audio_size: { type: [integer, "null"] }
+        is_learned: { type: boolean }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     VocabularyPage:
       type: object
-      required: [items, total, page, pageSize]
+      required: [items, total, page, pageSize, stats]
       properties:
         items: { type: array, items: { $ref: "#/components/schemas/Vocabulary" } }
         total: { type: integer, minimum: 0 }
         page: { type: integer, minimum: 1 }
         pageSize: { type: integer, minimum: 1 }
+        stats:
+          type: object
+          required: [unlearned, learned]
+          properties:
+            unlearned: { type: integer, minimum: 0 }
+            learned: { type: integer, minimum: 0 }
     Error:
       type: object
       required: [message]

@@ -10,6 +10,7 @@ type AudioButtonProps = {
   onActivate: (id: string | null) => void;
   compact?: boolean;
   kind?: "word" | "example";
+  externallyPlaying?: boolean;
 };
 
 export function AudioButton({
@@ -20,6 +21,7 @@ export function AudioButton({
   onActivate,
   compact = false,
   kind = "word",
+  externallyPlaying = false,
 }: AudioButtonProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -54,6 +56,10 @@ export function AudioButton({
   async function toggleAudio() {
     try {
       setFailed(false);
+      if (externallyPlaying) {
+        onActivate(null);
+        return;
+      }
       if (playing && audioRef.current) {
         audioRef.current.pause();
         setPlaying(false);
@@ -103,25 +109,26 @@ export function AudioButton({
         onClick={toggleAudio}
         disabled={loading}
         className={`inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500/20 disabled:opacity-60 ${
-          playing
+          playing || externallyPlaying
             ? "border-indigo-600 bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
             : failed
               ? "border-rose-200 bg-rose-50 text-rose-600 dark:border-rose-900 dark:bg-rose-950"
               : "border-indigo-100 bg-indigo-50 text-indigo-700 hover:border-indigo-200 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-300"
         } ${compact ? "h-10 w-10" : "min-h-10 px-3 text-xs"}`}
-        aria-label={playing ? `Tạm dừng ${name}` : `Phát ${name}`}
+        aria-label={playing || externallyPlaying ? `Dừng ${name}` : `Phát ${name}`}
         title={failed ? "Không thể phát audio" : name || "Phát audio"}
       >
         {loading ? (
           <LoaderCircle className="h-4 w-4 animate-spin" />
         ) : failed ? (
           <AlertCircle className="h-4 w-4" />
-        ) : playing ? (
+        ) : playing || externallyPlaying ? (
           <Pause className="h-4 w-4 fill-current" />
         ) : (
           <Play className="h-4 w-4 fill-current" />
         )}
-        {!compact && (playing ? "Tạm dừng" : failed ? "Thử lại" : "Nghe")}
+        {!compact &&
+          (playing || externallyPlaying ? "Dừng" : failed ? "Thử lại" : "Nghe")}
       </button>
       {!compact && name && (
         <span className="max-w-32 truncate text-xs text-slate-500" title={name}>

@@ -1,15 +1,18 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Database,
+  CircleDashed,
   Headphones,
   LibraryBig,
+  ListMusic,
   Plus,
   RefreshCw,
   Search,
   Sparkles,
+  Star,
+  Square,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell } from "../components/layout/AppShell";
 import { Button } from "../components/ui/Button";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
@@ -22,12 +25,36 @@ import { useVocabularies } from "../hooks/useVocabularies";
 import {
   createVocabulary,
   deleteVocabulary,
+  getAudioUrl,
   hasDuplicateVocabulary,
+  listAllVocabularies,
+  setVocabularyLearned,
   updateVocabulary,
 } from "../services/vocabulary.service";
-import type { Vocabulary, VocabularyFormValues } from "../types/vocabulary";
+import type {
+  Vocabulary,
+  VocabularyFormValues,
+  VocabularyStatus,
+} from "../types/vocabulary";
 import { toUserMessage } from "../utils/errors";
 import { PAGE_SIZE } from "../utils/validation";
+
+type PlaylistTrack = {
+  activationId: string;
+  vocabularyId: string;
+  kind: "word" | "example";
+  label: string;
+};
+
+type PlaylistProgress = {
+  current: number;
+  total: number;
+  label: string;
+  repetition: number;
+  repetitionTotal: number;
+};
+
+type PlaybackRate = 0.5 | 0.75 | 1 | 1.5;
 
 export default function VocabularyPage() {
   const { user } = useAuth();
@@ -36,10 +63,22 @@ export default function VocabularyPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [status, setStatus] = useState<VocabularyStatus>("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Vocabulary | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Vocabulary | null>(null);
   const [activeAudioId, setActiveAudioId] = useState<string | null>(null);
+  const [playlistPreparing, setPlaylistPreparing] = useState(false);
+  const [playlistPlaying, setPlaylistPlaying] = useState(false);
+  const [playlistProgress, setPlaylistProgress] = useState<PlaylistProgress | null>(null);
+  const [playbackRate, setPlaybackRate] = useState<PlaybackRate>(1);
+  const [repeatCount, setRepeatCount] = useState(1);
+  const playlistAudioRef = useRef<HTMLAudioElement | null>(null);
+  const playlistUrlRef = useRef<string | null>(null);
+  const playlistTracksRef = useRef<PlaylistTrack[]>([]);
+  const playlistRunRef = useRef(0);
+  const playlistSkippedRef = useRef(0);
+  const playlistDelayRef = useRef<number | null>(null);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -49,13 +88,223 @@ export default function VocabularyPage() {
     return () => window.clearTimeout(timeout);
   }, [searchInput]);
 
-  const vocabularyQuery = useVocabularies(user?.id, search, page);
+  const vocabularyQuery = useVocabularies(user?.id, search, page, status);
   const data = vocabularyQuery.data;
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
 
-  const audioCount = useMemo(
-    () => data?.items.filter((item) => item.audio_path || item.example_audio_path).length ?? 0,
-    [data?.items],
+  function releasePlaylistAudio() {
+    const audio = playlistAudioRef.current;
+    if (audio) {
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    }
+    if (playlistUrlRef.current) {
+      URL.revokeObjectURL(playlistUrlRef.current);
+      playlistUrlRef.current = null;
+    }
+  }
+
+  function stopPlaylist(showMessage = false) {
+    playlistRunRef.current += 1;
+    if (playlistDelayRef.current !== null) {
+      window.clearTimeout(playlistDelayRef.current);
+      playlistDelayRef.current = null;
+    }
+    releasePlaylistAudio();
+    playlistTracksRef.current = [];
+    setPlaylistPreparing(false);
+    setPlaylistPlaying(false);
+    setPlaylistProgress(null);
+    setActiveAudioId(null);
+    if (showMessage) showToast("Đã dừng danh sách phát.", "info");
+  }
+
+  function finishPlaylist(runId: number) {
+    if (runId !== playlistRunRef.current) return;
+    const skipped = playlistSkippedRef.current;
+    if (playlistDelayRef.current !== null) {
+      window.clearTimeout(playlistDelayRef.current);
+      playlistDelayRef.current = null;
+    }
+    releasePlaylistAudio();
+    playlistTracksRef.current = [];
+    setPlaylistPlaying(false);
+    setPlaylistProgress(null);
+    setActiveAudioId(null);
+    showToast(
+      skipped > 0
+        ? `Đã nghe xong. Có ${skipped} audio không thể phát và đã được bỏ qua.`
+        : "Đã phát xong toàn bộ từ vựng và ví dụ.",
+      skipped > 0 ? "info" : "success",
+    );
+  }
+
+  async function playPlaylistTrack(index: number, runId: number): Promise<void> {
+    if (runId !== playlistRunRef.current) return;
+    const tracks = playlistTracksRef.current;
+    if (index >= tracks.length) {
+      finishPlaylist(runId);
+      return;
+    }
+
+    const track = tracks[index];
+    setPlaylistProgress({
+      current: index + 1,
+      total: tracks.length,
+      label: track.label,
+      repetition: 1,
+      repetitionTotal: repeatCount,
+    });
+
+    let advanced = false;
+    try {
+      const url = await getAudioUrl(track.vocabularyId, track.kind);
+      if (runId !== playlistRunRef.current) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      releasePlaylistAudio();
+      playlistUrlRef.current = url;
+      const audio = playlistAudioRef.current ?? new Audio();
+      playlistAudioRef.current = audio;
+      audio.preload = "auto";
+      audio.src = url;
+      audio.playbackRate = playbackRate;
+      setActiveAudioId(track.activationId);
+
+      let completedRepetitions = 0;
+      const advance = (failed: boolean) => {
+        if (advanced || runId !== playlistRunRef.current) return;
+        advanced = true;
+        if (failed) playlistSkippedRef.current += 1;
+        const nextTrack = tracks[index + 1];
+        const shouldPauseBeforeExample =
+          !failed &&
+          track.kind === "word" &&
+          nextTrack?.kind === "example" &&
+          nextTrack.vocabularyId === track.vocabularyId;
+
+        if (shouldPauseBeforeExample) {
+          setActiveAudioId(null);
+          setPlaylistProgress({
+            current: index + 1,
+            total: tracks.length,
+            label: `${track.label.split(" · ")[0]} · nghỉ 1,5 giây trước ví dụ`,
+            repetition: repeatCount,
+            repetitionTotal: repeatCount,
+          });
+          playlistDelayRef.current = window.setTimeout(() => {
+            playlistDelayRef.current = null;
+            void playPlaylistTrack(index + 1, runId);
+          }, 1_500);
+          return;
+        }
+        void playPlaylistTrack(index + 1, runId);
+      };
+      audio.onended = () => {
+        completedRepetitions += 1;
+        if (completedRepetitions < repeatCount) {
+          setPlaylistProgress({
+            current: index + 1,
+            total: tracks.length,
+            label: track.label,
+            repetition: completedRepetitions + 1,
+            repetitionTotal: repeatCount,
+          });
+          audio.currentTime = 0;
+          void audio.play().catch(() => advance(true));
+          return;
+        }
+        advance(false);
+      };
+      audio.onerror = () => advance(true);
+      await audio.play();
+    } catch {
+      if (advanced || runId !== playlistRunRef.current) return;
+      advanced = true;
+      playlistSkippedRef.current += 1;
+      await playPlaylistTrack(index + 1, runId);
+    }
+  }
+
+  async function startPlaylist() {
+    if (playlistPlaying || playlistPreparing) {
+      stopPlaylist(true);
+      return;
+    }
+    if (!user) return;
+
+    const runId = playlistRunRef.current + 1;
+    playlistRunRef.current = runId;
+    setPlaylistPreparing(true);
+    setActiveAudioId(null);
+    playlistSkippedRef.current = 0;
+
+    try {
+      const vocabularies = await listAllVocabularies(user.id, search, status);
+      if (runId !== playlistRunRef.current) return;
+      const tracks = vocabularies.flatMap<PlaylistTrack>((item) => {
+        if (!item.audio_path || !item.example_audio_path) return [];
+        return [
+          {
+            activationId: item.id,
+            vocabularyId: item.id,
+            kind: "word",
+            label: `${item.english_word} · từ vựng`,
+          },
+          {
+            activationId: `${item.id}:example`,
+            vocabularyId: item.id,
+            kind: "example",
+            label: `${item.english_word} · ví dụ`,
+          },
+        ];
+      });
+
+      if (!tracks.length) {
+        setPlaylistPreparing(false);
+        showToast(
+          "Chưa có từ nào có đủ audio từ vựng và audio ví dụ để phát.",
+          "info",
+        );
+        return;
+      }
+
+      playlistTracksRef.current = tracks;
+      setPlaylistPreparing(false);
+      setPlaylistPlaying(true);
+      void playPlaylistTrack(0, runId);
+    } catch (error) {
+      if (runId !== playlistRunRef.current) return;
+      setPlaylistPreparing(false);
+      showToast(toUserMessage(error, "Không thể tạo danh sách phát."), "error");
+    }
+  }
+
+  function handleManualAudioActivation(id: string | null) {
+    stopPlaylist(false);
+    setActiveAudioId(id);
+  }
+
+  useEffect(
+    () => () => {
+      playlistRunRef.current += 1;
+      const audio = playlistAudioRef.current;
+      if (audio) {
+        audio.onended = null;
+        audio.onerror = null;
+        audio.pause();
+      }
+      if (playlistDelayRef.current !== null) {
+        window.clearTimeout(playlistDelayRef.current);
+      }
+      if (playlistUrlRef.current) URL.revokeObjectURL(playlistUrlRef.current);
+    },
+    [],
   );
 
   const saveMutation = useMutation({
@@ -91,12 +340,45 @@ export default function VocabularyPage() {
     },
   });
 
+  const learnedMutation = useMutation({
+    mutationFn: async (vocabulary: Vocabulary) =>
+      setVocabularyLearned(vocabulary.id, !vocabulary.is_learned),
+  });
+
+  function changeStatus(nextStatus: VocabularyStatus) {
+    if (nextStatus === status) return;
+    stopPlaylist(false);
+    setStatus(nextStatus);
+    setPage(1);
+  }
+
+  async function handleToggleLearned(vocabulary: Vocabulary) {
+    stopPlaylist(false);
+    try {
+      const updated = await learnedMutation.mutateAsync(vocabulary);
+      if ((data?.items.length ?? 0) === 1 && page > 1) {
+        setPage((current) => current - 1);
+      }
+      await queryClient.invalidateQueries({ queryKey: ["vocabularies", user?.id] });
+      showToast(
+        updated.is_learned
+          ? `Đã chuyển “${updated.english_word}” sang danh sách đã thuộc.`
+          : `Đã chuyển “${updated.english_word}” về danh sách chưa thuộc.`,
+        "success",
+      );
+    } catch (error) {
+      showToast(toUserMessage(error, "Không thể cập nhật trạng thái từ vựng."), "error");
+    }
+  }
+
   function openCreate() {
+    stopPlaylist(false);
     setEditing(null);
     setFormOpen(true);
   }
 
   function openEdit(vocabulary: Vocabulary) {
+    stopPlaylist(false);
     setEditing(vocabulary);
     setFormOpen(true);
   }
@@ -117,6 +399,7 @@ export default function VocabularyPage() {
 
   async function handleDelete() {
     if (!pendingDelete) return;
+    stopPlaylist(false);
     try {
       await deleteMutation.mutateAsync(pendingDelete);
       setActiveAudioId((current) =>
@@ -161,39 +444,70 @@ export default function VocabularyPage() {
       </section>
 
       <section className="mb-6 grid gap-4 sm:grid-cols-3">
-        {[
-          {
-            icon: LibraryBig,
-            label: "Tổng từ vựng",
-            value: vocabularyQuery.isLoading ? "—" : data?.total ?? 0,
-            color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
-          },
-          {
-            icon: Headphones,
-            label: "Có audio trên trang",
-            value: vocabularyQuery.isLoading ? "—" : audioCount,
-            color: "bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300",
-          },
-          {
-            icon: Database,
-            label: "Lưu trữ",
-            value: "Đã đồng bộ",
-            color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-          },
-        ].map(({ icon: Icon, label, value, color }) => (
-          <div
-            key={label}
-            className="flex items-center gap-4 rounded-2xl border border-white bg-white/90 p-4 shadow-sm shadow-slate-200/40 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 dark:shadow-none"
-          >
-            <span className={`grid h-11 w-11 place-items-center rounded-2xl ${color}`}>
-              <Icon className="h-5 w-5" />
-            </span>
-            <div>
-              <p className="text-xs font-semibold text-slate-500">{label}</p>
-              <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">{value}</p>
-            </div>
+        <button
+          type="button"
+          onClick={() => changeStatus("all")}
+          className={`flex items-center gap-4 rounded-2xl border p-4 text-left shadow-sm backdrop-blur transition ${
+            status === "all"
+              ? "border-indigo-300 bg-indigo-50 ring-4 ring-indigo-500/10 dark:border-indigo-800 dark:bg-indigo-950/40"
+              : "border-white bg-white/90 hover:border-indigo-200 hover:bg-indigo-50/50 dark:border-slate-800 dark:bg-slate-900/90 dark:hover:border-indigo-900"
+          }`}
+          aria-pressed={status === "all"}
+        >
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+            <LibraryBig className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-xs font-semibold text-slate-500">Tổng từ vựng</p>
+            <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
+              {vocabularyQuery.isLoading
+                ? "—"
+                : (data?.stats.unlearned ?? 0) + (data?.stats.learned ?? 0)}
+            </p>
           </div>
-        ))}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => changeStatus("unlearned")}
+          className={`flex items-center gap-4 rounded-2xl border p-4 text-left shadow-sm backdrop-blur transition ${
+            status === "unlearned"
+              ? "border-cyan-300 bg-cyan-50 ring-4 ring-cyan-500/10 dark:border-cyan-800 dark:bg-cyan-950/40"
+              : "border-white bg-white/90 hover:border-cyan-200 hover:bg-cyan-50/50 dark:border-slate-800 dark:bg-slate-900/90 dark:hover:border-cyan-900"
+          }`}
+          aria-pressed={status === "unlearned"}
+        >
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300">
+            <CircleDashed className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-xs font-semibold text-slate-500">Chưa thuộc</p>
+            <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
+              {vocabularyQuery.isLoading ? "—" : data?.stats.unlearned ?? 0}
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => changeStatus("learned")}
+          className={`flex items-center gap-4 rounded-2xl border p-4 text-left shadow-sm backdrop-blur transition ${
+            status === "learned"
+              ? "border-amber-300 bg-amber-50 ring-4 ring-amber-500/10 dark:border-amber-800 dark:bg-amber-950/40"
+              : "border-white bg-white/90 hover:border-amber-200 hover:bg-amber-50/50 dark:border-slate-800 dark:bg-slate-900/90 dark:hover:border-amber-900"
+          }`}
+          aria-pressed={status === "learned"}
+        >
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-300">
+            <Star className="h-5 w-5 fill-current" />
+          </span>
+          <div>
+            <p className="text-xs font-semibold text-slate-500">Đã thuộc</p>
+            <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
+              {vocabularyQuery.isLoading ? "—" : data?.stats.learned ?? 0}
+            </p>
+          </div>
+        </button>
       </section>
 
       <section className="overflow-hidden rounded-[24px] border border-white bg-white/95 shadow-xl shadow-slate-200/40 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 dark:shadow-none">
@@ -204,30 +518,102 @@ export default function VocabularyPage() {
             </h2>
             <p className="mt-1 text-xs text-slate-500">Từ mới nhất được hiển thị trước.</p>
           </div>
-          <div className="relative w-full sm:max-w-sm">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              id="vocabulary-search"
-              name="vocabularySearch"
-              type="search"
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="Tìm tiếng Anh hoặc tiếng Việt…"
-              aria-label="Tìm từ vựng"
-              className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:bg-slate-900"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => setSearchInput("")}
-                className="absolute right-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
-                aria-label="Xóa từ khóa tìm kiếm"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
+          <div className="flex w-full flex-col gap-3 lg:max-w-4xl lg:flex-row lg:items-center lg:justify-end">
+            <div className="flex shrink-0 items-center gap-2">
+              <label className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+                Tốc độ
+                <select
+                  value={playbackRate}
+                  disabled={playlistPlaying || playlistPreparing}
+                  onChange={(event) =>
+                    setPlaybackRate(Number(event.target.value) as PlaybackRate)
+                  }
+                  className="bg-transparent font-bold text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:text-white"
+                  aria-label="Tốc độ phát danh sách"
+                >
+                  <option value={0.5}>x0.5</option>
+                  <option value={0.75}>x0.75</option>
+                  <option value={1}>x1</option>
+                  <option value={1.5}>x1.5</option>
+                </select>
+              </label>
+              <label className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+                Lặp
+                <select
+                  value={repeatCount}
+                  disabled={playlistPlaying || playlistPreparing}
+                  onChange={(event) => setRepeatCount(Number(event.target.value))}
+                  className="bg-transparent font-bold text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:text-white"
+                  aria-label="Số lần phát mỗi audio"
+                >
+                  {[1, 2, 3, 5].map((count) => (
+                    <option key={count} value={count}>
+                      {count} lần
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <Button
+              type="button"
+              variant={playlistPlaying ? "danger" : "secondary"}
+              loading={playlistPreparing}
+              disabled={!playlistPlaying && (data?.total ?? 0) === 0}
+              onClick={() => void startPlaylist()}
+              className="shrink-0"
+            >
+              {playlistPlaying ? (
+                <Square className="h-4 w-4 fill-current" />
+              ) : (
+                <ListMusic className="h-4 w-4" />
+              )}
+              {playlistPlaying
+                ? `Dừng (${playlistProgress?.current ?? 0}/${playlistProgress?.total ?? 0})`
+                : "Nghe tất cả"}
+            </Button>
+            <div className="relative w-full sm:max-w-sm">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                id="vocabulary-search"
+                name="vocabularySearch"
+                type="search"
+                value={searchInput}
+                onChange={(event) => {
+                  stopPlaylist(false);
+                  setSearchInput(event.target.value);
+                }}
+                placeholder="Tìm tiếng Anh hoặc tiếng Việt…"
+                aria-label="Tìm từ vựng"
+                className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:bg-slate-900"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    stopPlaylist(false);
+                    setSearchInput("");
+                  }}
+                  className="absolute right-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800"
+                  aria-label="Xóa từ khóa tìm kiếm"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
+
+        {playlistPlaying && playlistProgress && (
+          <div
+            className="flex items-center gap-2 border-b border-indigo-100 bg-indigo-50 px-4 py-2.5 text-xs font-semibold text-indigo-700 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-300 sm:px-6"
+            aria-live="polite"
+          >
+            <Headphones className="h-4 w-4 animate-pulse" />
+            Đang phát {playlistProgress.current}/{playlistProgress.total}: {playlistProgress.label}
+            {playlistProgress.repetitionTotal > 1 &&
+              ` · lần ${playlistProgress.repetition}/${playlistProgress.repetitionTotal}`}
+          </div>
+        )}
 
         {vocabularyQuery.isError ? (
           <div className="flex min-h-80 flex-col items-center justify-center px-6 text-center">
@@ -253,10 +639,16 @@ export default function VocabularyPage() {
             items={data?.items ?? []}
             loading={vocabularyQuery.isLoading}
             search={search}
+            status={status}
             activeAudioId={activeAudioId}
-            onActivateAudio={setActiveAudioId}
+            playlistPlaying={playlistPlaying}
+            onActivateAudio={handleManualAudioActivation}
             onEdit={openEdit}
             onDelete={setPendingDelete}
+            onToggleLearned={(vocabulary) => void handleToggleLearned(vocabulary)}
+            learnedUpdatingId={
+              learnedMutation.isPending ? learnedMutation.variables?.id ?? null : null
+            }
             onAdd={openCreate}
           />
         )}
@@ -266,6 +658,7 @@ export default function VocabularyPage() {
           totalPages={totalPages}
           total={data?.total ?? 0}
           onPageChange={(nextPage) => {
+            stopPlaylist(false);
             setPage(nextPage);
             window.scrollTo({ top: 0, behavior: "smooth" });
           }}
