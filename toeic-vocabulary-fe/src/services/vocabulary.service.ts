@@ -1,4 +1,4 @@
-import { apiRequest, fetchProtectedBlob } from "../lib/api";
+import { ApiError, apiRequest, fetchProtectedBlob } from "../lib/api";
 import type {
   Vocabulary,
   VocabularyFormValues,
@@ -103,9 +103,17 @@ export async function getWordMeaningAudioUrl(
   vocabularyId: string,
   generate: boolean,
 ) {
-  const blob = await fetchProtectedBlob(
-    `/vocabularies/${vocabularyId}/meaning-audio`,
-    generate ? { method: "POST" } : undefined,
-  );
+  const path = `/vocabularies/${vocabularyId}/meaning-audio`;
+  let blob: Blob;
+  if (generate) {
+    blob = await fetchProtectedBlob(path, { method: "POST" });
+  } else {
+    try {
+      blob = await fetchProtectedBlob(path);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 404) throw error;
+      blob = await fetchProtectedBlob(path, { method: "POST" });
+    }
+  }
   return URL.createObjectURL(blob);
 }

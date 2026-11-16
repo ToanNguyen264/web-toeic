@@ -12,7 +12,7 @@ REST API cho đăng ký/đăng nhập, quản lý từ vựng cá nhân, tạo c
 
 API mặc định ở `http://localhost:3000/api`; hợp đồng đầy đủ nằm tại [docs/openapi.yaml](docs/openapi.yaml).
 
-Các biến `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` và `ELEVENLABS_MODEL_ID` cấu hình giọng tiếng Anh. `ELEVENLABS_VI_VOICE_ID` và `ELEVENLABS_VI_MODEL_ID` cấu hình giọng tiếng Việt. Endpoint `POST /api/ai/example-audio` tạo riêng hai đoạn rồi ghép theo thứ tự Anh → nghỉ 1,5 giây → Việt. Việc ghép audio cần `ffmpeg`; Docker image đã cài sẵn. Không đưa API key sang biến `VITE_*` vì các biến đó có thể xuất hiện trong mã frontend.
+Các biến `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` và `ELEVENLABS_MODEL_ID` cấu hình giọng tiếng Anh. `ELEVENLABS_VI_VOICE_ID` và `ELEVENLABS_VI_MODEL_ID` cấu hình giọng tiếng Việt. Endpoint `POST /api/ai/example-audio` tạo riêng hai đoạn rồi ghép theo thứ tự Anh → nghỉ 1 giây → Việt. Việc ghép audio cần `ffmpeg`; Docker image đã cài sẵn. Không đưa API key sang biến `VITE_*` vì các biến đó có thể xuất hiện trong mã frontend.
 
 Các biến `GEMINI_API_KEY` và `GEMINI_MODEL` cấu hình `POST /api/ai/example`. Gemini chỉ tạo nội dung; audio ví dụ song ngữ vẫn được ElevenLabs tạo qua `POST /api/ai/example-audio`.
 

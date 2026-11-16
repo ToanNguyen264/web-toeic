@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CircleDashed,
   Headphones,
+  Languages,
   LibraryBig,
   ListMusic,
   Plus,
@@ -26,6 +27,7 @@ import {
   createVocabulary,
   deleteVocabulary,
   getAudioUrl,
+  getWordMeaningAudioUrl,
   hasDuplicateVocabulary,
   listAllVocabularies,
   setVocabularyLearned,
@@ -42,9 +44,12 @@ import { PAGE_SIZE } from "../utils/validation";
 type PlaylistTrack = {
   activationId: string;
   vocabularyId: string;
-  kind: "word" | "example";
+  kind: "word" | "example" | "meaning";
+  hasStoredAudio?: boolean;
   label: string;
 };
+
+type PlaylistMode = "word-example" | "word-meaning";
 
 type PlaylistProgress = {
   current: number;
@@ -70,6 +75,7 @@ export default function VocabularyPage() {
   const [activeAudioId, setActiveAudioId] = useState<string | null>(null);
   const [playlistPreparing, setPlaylistPreparing] = useState(false);
   const [playlistPlaying, setPlaylistPlaying] = useState(false);
+  const [playlistMode, setPlaylistMode] = useState<PlaylistMode | null>(null);
   const [playlistProgress, setPlaylistProgress] = useState<PlaylistProgress | null>(null);
   const [playbackRate, setPlaybackRate] = useState<PlaybackRate>(1);
   const [repeatCount, setRepeatCount] = useState(1);
@@ -79,6 +85,7 @@ export default function VocabularyPage() {
   const playlistRunRef = useRef(0);
   const playlistSkippedRef = useRef(0);
   const playlistDelayRef = useRef<number | null>(null);
+  const playlistModeRef = useRef<PlaylistMode | null>(null);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -117,6 +124,8 @@ export default function VocabularyPage() {
     playlistTracksRef.current = [];
     setPlaylistPreparing(false);
     setPlaylistPlaying(false);
+    setPlaylistMode(null);
+    playlistModeRef.current = null;
     setPlaylistProgress(null);
     setActiveAudioId(null);
     if (showMessage) showToast("Đã dừng danh sách phát.", "info");
@@ -125,6 +134,7 @@ export default function VocabularyPage() {
   function finishPlaylist(runId: number) {
     if (runId !== playlistRunRef.current) return;
     const skipped = playlistSkippedRef.current;
+    const finishedMode = playlistModeRef.current;
     if (playlistDelayRef.current !== null) {
       window.clearTimeout(playlistDelayRef.current);
       playlistDelayRef.current = null;
@@ -132,14 +142,21 @@ export default function VocabularyPage() {
     releasePlaylistAudio();
     playlistTracksRef.current = [];
     setPlaylistPlaying(false);
+    setPlaylistMode(null);
+    playlistModeRef.current = null;
     setPlaylistProgress(null);
     setActiveAudioId(null);
     showToast(
       skipped > 0
         ? `Đã nghe xong. Có ${skipped} audio không thể phát và đã được bỏ qua.`
-        : "Đã phát xong toàn bộ từ vựng và ví dụ.",
+        : finishedMode === "word-meaning"
+          ? "Đã phát xong toàn bộ từ vựng và nghĩa tiếng Việt."
+          : "Đã phát xong toàn bộ từ vựng và ví dụ.",
       skipped > 0 ? "info" : "success",
     );
+    if (finishedMode === "word-meaning") {
+      void queryClient.invalidateQueries({ queryKey: ["vocabularies", user?.id] });
+    }
   }
 
   async function playPlaylistTrack(index: number, runId: number): Promise<void> {
@@ -161,7 +178,13 @@ export default function VocabularyPage() {
 
     let advanced = false;
     try {
-      const url = await getAudioUrl(track.vocabularyId, track.kind);
+      const url =
+        track.kind === "meaning"
+          ? await getWordMeaningAudioUrl(
+              track.vocabularyId,
+              !track.hasStoredAudio,
+            )
+          : await getAudioUrl(track.vocabularyId, track.kind);
       if (runId !== playlistRunRef.current) {
         URL.revokeObjectURL(url);
         return;
@@ -193,14 +216,14 @@ export default function VocabularyPage() {
           setPlaylistProgress({
             current: index + 1,
             total: tracks.length,
-            label: `${track.label.split(" · ")[0]} · nghỉ 1,5 giây trước ví dụ`,
+            label: `${track.label.split(" · ")[0]} · nghỉ 1 giây trước ví dụ`,
             repetition: repeatCount,
             repetitionTotal: repeatCount,
           });
           playlistDelayRef.current = window.setTimeout(() => {
             playlistDelayRef.current = null;
             void playPlaylistTrack(index + 1, runId);
-          }, 1_500);
+          }, 1_000);
           return;
         }
         void playPlaylistTrack(index + 1, runId);
@@ -231,7 +254,7 @@ export default function VocabularyPage() {
     }
   }
 
-  async function startPlaylist() {
+  async function startPlaylist(mode: PlaylistMode) {
     if (playlistPlaying || playlistPreparing) {
       stopPlaylist(true);
       return;
@@ -241,6 +264,8 @@ export default function VocabularyPage() {
     const runId = playlistRunRef.current + 1;
     playlistRunRef.current = runId;
     setPlaylistPreparing(true);
+    setPlaylistMode(mode);
+    playlistModeRef.current = mode;
     setActiveAudioId(null);
     playlistSkippedRef.current = 0;
 
@@ -248,6 +273,17 @@ export default function VocabularyPage() {
       const vocabularies = await listAllVocabularies(user.id, search, status);
       if (runId !== playlistRunRef.current) return;
       const tracks = vocabularies.flatMap<PlaylistTrack>((item) => {
+        if (mode === "word-meaning") {
+          return [
+            {
+              activationId: `${item.id}:meaning`,
+              vocabularyId: item.id,
+              kind: "meaning",
+              hasStoredAudio: Boolean(item.word_meaning_audio_path),
+              label: `${item.english_word} · từ và nghĩa`,
+            },
+          ];
+        }
         if (!item.audio_path || !item.example_audio_path) return [];
         return [
           {
@@ -267,8 +303,12 @@ export default function VocabularyPage() {
 
       if (!tracks.length) {
         setPlaylistPreparing(false);
+        setPlaylistMode(null);
+        playlistModeRef.current = null;
         showToast(
-          "Chưa có từ nào có đủ audio từ vựng và audio ví dụ để phát.",
+          mode === "word-meaning"
+            ? "Danh sách hiện tại chưa có từ vựng để phát."
+            : "Chưa có từ nào có đủ audio từ vựng và audio ví dụ để phát.",
           "info",
         );
         return;
@@ -281,6 +321,8 @@ export default function VocabularyPage() {
     } catch (error) {
       if (runId !== playlistRunRef.current) return;
       setPlaylistPreparing(false);
+      setPlaylistMode(null);
+      playlistModeRef.current = null;
       showToast(toUserMessage(error, "Không thể tạo danh sách phát."), "error");
     }
   }
@@ -518,7 +560,7 @@ export default function VocabularyPage() {
             </h2>
             <p className="mt-1 text-xs text-slate-500">Từ mới nhất được hiển thị trước.</p>
           </div>
-          <div className="flex w-full flex-col gap-3 lg:max-w-4xl lg:flex-row lg:items-center lg:justify-end">
+          <div className="flex w-full flex-col gap-3 lg:max-w-6xl lg:flex-row lg:items-center lg:justify-end">
             <div className="flex shrink-0 items-center gap-2">
               <label className="flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
                 Tốc độ
@@ -554,23 +596,56 @@ export default function VocabularyPage() {
                 </select>
               </label>
             </div>
-            <Button
-              type="button"
-              variant={playlistPlaying ? "danger" : "secondary"}
-              loading={playlistPreparing}
-              disabled={!playlistPlaying && (data?.total ?? 0) === 0}
-              onClick={() => void startPlaylist()}
-              className="shrink-0"
-            >
-              {playlistPlaying ? (
-                <Square className="h-4 w-4 fill-current" />
-              ) : (
-                <ListMusic className="h-4 w-4" />
-              )}
-              {playlistPlaying
-                ? `Dừng (${playlistProgress?.current ?? 0}/${playlistProgress?.total ?? 0})`
-                : "Nghe tất cả"}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant={
+                  playlistPlaying && playlistMode === "word-example"
+                    ? "danger"
+                    : "secondary"
+                }
+                loading={playlistPreparing && playlistMode === "word-example"}
+                disabled={
+                  (!playlistPlaying && !playlistPreparing && (data?.total ?? 0) === 0) ||
+                  ((playlistPlaying || playlistPreparing) && playlistMode !== "word-example")
+                }
+                onClick={() => void startPlaylist("word-example")}
+                className="shrink-0"
+              >
+                {playlistPlaying && playlistMode === "word-example" ? (
+                  <Square className="h-4 w-4 fill-current" />
+                ) : (
+                  <ListMusic className="h-4 w-4" />
+                )}
+                {playlistPlaying && playlistMode === "word-example"
+                  ? `Dừng (${playlistProgress?.current ?? 0}/${playlistProgress?.total ?? 0})`
+                  : "Nghe tất cả"}
+              </Button>
+              <Button
+                type="button"
+                variant={
+                  playlistPlaying && playlistMode === "word-meaning"
+                    ? "danger"
+                    : "secondary"
+                }
+                loading={playlistPreparing && playlistMode === "word-meaning"}
+                disabled={
+                  (!playlistPlaying && !playlistPreparing && (data?.total ?? 0) === 0) ||
+                  ((playlistPlaying || playlistPreparing) && playlistMode !== "word-meaning")
+                }
+                onClick={() => void startPlaylist("word-meaning")}
+                className="shrink-0 border-cyan-200 text-cyan-700 dark:border-cyan-900 dark:text-cyan-300"
+              >
+                {playlistPlaying && playlistMode === "word-meaning" ? (
+                  <Square className="h-4 w-4 fill-current" />
+                ) : (
+                  <Languages className="h-4 w-4" />
+                )}
+                {playlistPlaying && playlistMode === "word-meaning"
+                  ? `Dừng (${playlistProgress?.current ?? 0}/${playlistProgress?.total ?? 0})`
+                  : "Nghe từ + nghĩa"}
+              </Button>
+            </div>
             <div className="relative w-full sm:max-w-sm">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input

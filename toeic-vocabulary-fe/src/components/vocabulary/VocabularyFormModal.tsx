@@ -435,7 +435,7 @@ export function VocabularyFormModal({
                 disabled={busy || !cleanText(exampleEnglish) || !cleanText(exampleVietnamese)}
               >
                 {!generatingExampleAudio && <Languages className="h-4 w-4" />}
-                {exampleAudioFile ? "Tạo lại audio ví dụ" : "Tạo audio Anh → nghỉ 1,5 giây → Việt"}
+                {exampleAudioFile ? "Tạo lại audio ví dụ" : "Tạo audio Anh → nghỉ 1 giây → Việt"}
               </Button>
 
               {exampleAudioFile && examplePreviewUrl && (

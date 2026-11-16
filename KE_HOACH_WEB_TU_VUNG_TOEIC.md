@@ -32,7 +32,7 @@ MVP không xác minh email, không quên mật khẩu, không đăng nhập mạ
 - Nghe thử file trước khi lưu; nghe/phát dừng trong danh sách sau khi lưu.
 - Thay hoặc xóa audio độc lập khi sửa từ.
 - Tạo câu ví dụ tiếng Anh trong ngữ cảnh TOEIC và bản dịch tiếng Việt bằng Gemini.
-- Tạo audio đọc câu tiếng Anh, nghỉ 1,5 giây rồi đọc nghĩa tiếng Việt bằng ElevenLabs.
+- Tạo audio đọc câu tiếng Anh, nghỉ 1 giây rồi đọc nghĩa tiếng Việt bằng ElevenLabs.
 - Backend kiểm tra MIME, dung lượng và magic bytes để ngăn file giả định dạng.
 - Khi thay/xóa từ, file audio cũ được dọn khỏi storage.
 
@@ -121,7 +121,7 @@ Quan hệ có cascade delete từ `users` tới refresh token và vocabulary.
 - `GET /api/vocabularies/:id/audio`
 - `POST /api/ai/audio`: tạo MP3 từ từ tiếng Anh bằng ElevenLabs; yêu cầu đăng nhập.
 - `POST /api/ai/example`: tạo câu ví dụ TOEIC có cấu trúc bằng Gemini.
-- `POST /api/ai/example-audio`: tạo audio ví dụ song ngữ có khoảng nghỉ 1,5 giây.
+- `POST /api/ai/example-audio`: tạo audio ví dụ song ngữ có khoảng nghỉ 1 giây.
 
 Chi tiết request, response và lỗi được duy trì tại `toeic-vocabulary-be/docs/openapi.yaml`.
 

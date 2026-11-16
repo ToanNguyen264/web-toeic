@@ -104,7 +104,7 @@ export function WordMeaningAudioButton({
           ? "Không thể tạo hoặc phát audio từ và nghĩa"
           : stored
             ? "Phát audio từ và nghĩa đã lưu"
-            : "Tạo và lưu audio: tiếng Anh, nghỉ 1,5 giây rồi đọc nghĩa tiếng Việt"
+            : "Tạo và lưu audio: tiếng Anh, nghỉ 1 giây rồi đọc nghĩa tiếng Việt"
       }
     >
       {loading ? (

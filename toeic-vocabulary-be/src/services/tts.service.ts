@@ -172,7 +172,7 @@ async function combineAudioWithPause(
           "-f",
           "lavfi",
           "-t",
-          "1.5",
+          "1",
           "-i",
           "anullsrc=channel_layout=stereo:sample_rate=44100",
           "-i",

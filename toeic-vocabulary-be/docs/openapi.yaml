@@ -231,7 +231,7 @@ paths:
       parameters: [{ $ref: "#/components/parameters/VocabularyId" }]
       responses:
         "200":
-          description: Audio đọc câu tiếng Anh, nghỉ 1,5 giây rồi đọc nghĩa tiếng Việt
+          description: Audio đọc câu tiếng Anh, nghỉ 1 giây rồi đọc nghĩa tiếng Việt
           content:
             audio/mpeg: { schema: { type: string, format: binary } }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -301,7 +301,7 @@ paths:
   /ai/example-audio:
     post:
       tags: [AI Content]
-      summary: Tạo MP3 song ngữ với khoảng nghỉ 1,5 giây bằng ElevenLabs
+      summary: Tạo MP3 song ngữ với khoảng nghỉ 1 giây bằng ElevenLabs
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
