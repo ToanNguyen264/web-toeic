@@ -778,22 +778,27 @@ export default function VocabularyPage() {
             </Button>
           </div>
         ) : (
-          <VocabularyList
-            items={data?.items ?? []}
-            loading={vocabularyQuery.isLoading}
-            search={search}
-            status={status}
-            activeAudioId={activeAudioId}
-            playlistPlaying={playlistPlaying}
-            onActivateAudio={handleManualAudioActivation}
-            onEdit={openEdit}
-            onDelete={setPendingDelete}
-            onToggleLearned={(vocabulary) => void handleToggleLearned(vocabulary)}
-            learnedUpdatingId={
-              learnedMutation.isPending ? learnedMutation.variables?.id ?? null : null
-            }
-            onAdd={openCreate}
-          />
+          <div
+            key={`${status}:${search}:${page}`}
+            className="max-h-[70vh] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+          >
+            <VocabularyList
+              items={data?.items ?? []}
+              loading={vocabularyQuery.isLoading}
+              search={search}
+              status={status}
+              activeAudioId={activeAudioId}
+              playlistPlaying={playlistPlaying}
+              onActivateAudio={handleManualAudioActivation}
+              onEdit={openEdit}
+              onDelete={setPendingDelete}
+              onToggleLearned={(vocabulary) => void handleToggleLearned(vocabulary)}
+              learnedUpdatingId={
+                learnedMutation.isPending ? learnedMutation.variables?.id ?? null : null
+              }
+              onAdd={openCreate}
+            />
+          </div>
         )}
 
         <Pagination
