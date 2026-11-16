@@ -11,6 +11,7 @@ import {
 import type { Vocabulary, VocabularyStatus } from "../../types/vocabulary";
 import { formatFileSize } from "../../utils/validation";
 import { AudioButton } from "./AudioButton";
+import { WordMeaningAudioButton } from "./WordMeaningAudioButton";
 
 type VocabularyListProps = {
   items: Vocabulary[];
@@ -183,14 +184,24 @@ export function VocabularyList({
                   )}
                 </td>
                 <td className="px-6 py-5 align-top">
-                  <AudioButton
-                    id={item.id}
-                    path={item.audio_path}
-                    name={item.audio_name}
-                    isActive={activeAudioId === item.id}
-                    externallyPlaying={playlistPlaying && activeAudioId === item.id}
-                    onActivate={onActivateAudio}
-                  />
+                  <div className="flex flex-col items-start gap-2">
+                    <AudioButton
+                      id={item.id}
+                      path={item.audio_path}
+                      name={item.audio_name}
+                      isActive={activeAudioId === item.id}
+                      externallyPlaying={playlistPlaying && activeAudioId === item.id}
+                      onActivate={onActivateAudio}
+                    />
+                    <WordMeaningAudioButton
+                      key={`${item.id}:${item.updated_at}:meaning`}
+                      id={item.id}
+                      english={item.english_word}
+                      path={item.word_meaning_audio_path}
+                      isActive={activeAudioId === `${item.id}:meaning`}
+                      onActivate={onActivateAudio}
+                    />
+                  </div>
                   {item.audio_size ? (
                     <p className="mt-1.5 text-[11px] text-slate-400">
                       {formatFileSize(item.audio_size)}
@@ -291,15 +302,25 @@ export function VocabularyList({
                 </div>
               </div>
             )}
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3 dark:bg-slate-900">
-              <AudioButton
-                id={item.id}
-                path={item.audio_path}
-                name={item.audio_name}
-                isActive={activeAudioId === item.id}
-                externallyPlaying={playlistPlaying && activeAudioId === item.id}
-                onActivate={onActivateAudio}
-              />
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3 dark:bg-slate-900">
+              <div className="flex flex-wrap items-center gap-2">
+                <AudioButton
+                  id={item.id}
+                  path={item.audio_path}
+                  name={item.audio_name}
+                  isActive={activeAudioId === item.id}
+                  externallyPlaying={playlistPlaying && activeAudioId === item.id}
+                  onActivate={onActivateAudio}
+                />
+                <WordMeaningAudioButton
+                  key={`${item.id}:${item.updated_at}:meaning`}
+                  id={item.id}
+                  english={item.english_word}
+                  path={item.word_meaning_audio_path}
+                  isActive={activeAudioId === `${item.id}:meaning`}
+                  onActivate={onActivateAudio}
+                />
+              </div>
               <div className="flex shrink-0 gap-1">
                 <button
                   type="button"

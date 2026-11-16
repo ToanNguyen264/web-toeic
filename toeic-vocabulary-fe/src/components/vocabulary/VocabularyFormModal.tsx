@@ -284,48 +284,62 @@ export function VocabularyFormModal({
       onClose={() => {
         if (!busy) onClose();
       }}
-      size="lg"
+      size="xl"
     >
       <form onSubmit={handleSubmit} noValidate>
-        <div className="space-y-5 p-5 sm:p-6">
-          <TextField
-            id="english-word"
-            label="Từ tiếng Anh"
-            placeholder="Ví dụ: opportunity"
-            value={englishWord}
-            onChange={(event) => setEnglishWord(event.target.value)}
-            error={errors.englishWord}
-            maxLength={150}
-            autoFocus
-          />
+        <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.3fr)_minmax(0,0.85fr)] lg:items-start">
+          <section className="space-y-4 rounded-2xl border border-indigo-100 bg-indigo-50/40 p-4 dark:border-indigo-900 dark:bg-indigo-950/20">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-300">
+                <Languages className="h-5 w-5" />
+              </span>
+              <div>
+                <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                  Thông tin từ vựng
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-500">Nhập từ và nghĩa cần ghi nhớ.</p>
+              </div>
+            </div>
 
-          <div>
-            <label
-              htmlFor="vietnamese-meaning"
-              className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200"
-            >
-              Nghĩa tiếng Việt
-            </label>
-            <textarea
-              id="vietnamese-meaning"
-              rows={4}
-              maxLength={1000}
-              value={vietnameseMeaning}
-              onChange={(event) => setVietnameseMeaning(event.target.value)}
-              placeholder="Ví dụ: cơ hội"
-              aria-invalid={Boolean(errors.vietnameseMeaning)}
-              className={`w-full resize-none rounded-xl border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 dark:bg-slate-900 dark:text-white ${
-                errors.vietnameseMeaning
-                  ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/10"
-                  : "border-slate-200 hover:border-slate-300 focus:border-indigo-500 focus:ring-indigo-500/10 dark:border-slate-700"
-              }`}
+            <TextField
+              id="english-word"
+              label="Từ tiếng Anh"
+              placeholder="Ví dụ: opportunity"
+              value={englishWord}
+              onChange={(event) => setEnglishWord(event.target.value)}
+              error={errors.englishWord}
+              maxLength={150}
+              autoFocus
             />
-            {errors.vietnameseMeaning && (
-              <p className="mt-1.5 text-xs font-medium text-rose-600">
-                {errors.vietnameseMeaning}
-              </p>
-            )}
-          </div>
+
+            <div>
+              <label
+                htmlFor="vietnamese-meaning"
+                className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200"
+              >
+                Nghĩa tiếng Việt
+              </label>
+              <textarea
+                id="vietnamese-meaning"
+                rows={6}
+                maxLength={1000}
+                value={vietnameseMeaning}
+                onChange={(event) => setVietnameseMeaning(event.target.value)}
+                placeholder="Ví dụ: cơ hội"
+                aria-invalid={Boolean(errors.vietnameseMeaning)}
+                className={`w-full resize-none rounded-xl border bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 dark:bg-slate-900 dark:text-white ${
+                  errors.vietnameseMeaning
+                    ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/10"
+                    : "border-slate-200 hover:border-slate-300 focus:border-indigo-500 focus:ring-indigo-500/10 dark:border-slate-700"
+                }`}
+              />
+              {errors.vietnameseMeaning && (
+                <p className="mt-1.5 text-xs font-medium text-rose-600">
+                  {errors.vietnameseMeaning}
+                </p>
+              )}
+            </div>
+          </section>
 
           <section className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4 dark:border-violet-900 dark:bg-violet-950/20 sm:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -476,7 +490,7 @@ export function VocabularyFormModal({
             </div>
           </section>
 
-          <div>
+          <section className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/30">
             <div className="mb-2 flex items-center justify-between gap-3">
               <label className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                 Audio phát âm <span className="font-normal text-slate-400">(không bắt buộc)</span>
@@ -496,7 +510,7 @@ export function VocabularyFormModal({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className={`group flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-5 py-7 text-center transition ${
+                className={`group flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-5 py-5 text-center transition ${
                   errors.audio
                     ? "border-rose-300 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/40"
                     : "border-slate-200 bg-slate-50/70 hover:border-indigo-300 hover:bg-indigo-50/60 dark:border-slate-700 dark:bg-slate-800/40 dark:hover:border-indigo-700 dark:hover:bg-indigo-950/30"
@@ -580,7 +594,7 @@ export function VocabularyFormModal({
                 </span>
               </label>
             )}
-          </div>
+          </section>
         </div>
 
         <div className="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50/70 px-5 py-4 dark:border-slate-800 dark:bg-slate-950/40 sm:flex-row sm:justify-end sm:px-6">

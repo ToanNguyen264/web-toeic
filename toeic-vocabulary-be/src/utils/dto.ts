@@ -20,6 +20,13 @@ export function vocabularyDto(vocabulary: Vocabulary) {
     audio_name: vocabulary.audioName,
     audio_type: vocabulary.audioType,
     audio_size: vocabulary.audioSize === null ? null : Number(vocabulary.audioSize),
+    word_meaning_audio_path: vocabulary.wordMeaningAudioPath,
+    word_meaning_audio_name: vocabulary.wordMeaningAudioName,
+    word_meaning_audio_type: vocabulary.wordMeaningAudioType,
+    word_meaning_audio_size:
+      vocabulary.wordMeaningAudioSize === null
+        ? null
+        : Number(vocabulary.wordMeaningAudioSize),
     example_english: vocabulary.exampleEnglish,
     example_vietnamese: vocabulary.exampleVietnamese,
     example_audio_path: vocabulary.exampleAudioPath,

@@ -98,3 +98,14 @@ export async function getAudioUrl(vocabularyId: string, kind: "word" | "example"
   const blob = await fetchProtectedBlob(`/vocabularies/${vocabularyId}${suffix}`);
   return URL.createObjectURL(blob);
 }
+
+export async function getWordMeaningAudioUrl(
+  vocabularyId: string,
+  generate: boolean,
+) {
+  const blob = await fetchProtectedBlob(
+    `/vocabularies/${vocabularyId}/meaning-audio`,
+    generate ? { method: "POST" } : undefined,
+  );
+  return URL.createObjectURL(blob);
+}

@@ -8,6 +8,10 @@ export type Vocabulary = {
   audio_name: string | null;
   audio_type: string | null;
   audio_size: number | null;
+  word_meaning_audio_path: string | null;
+  word_meaning_audio_name: string | null;
+  word_meaning_audio_type: string | null;
+  word_meaning_audio_size: number | null;
   example_english: string | null;
   example_vietnamese: string | null;
   example_audio_path: string | null;

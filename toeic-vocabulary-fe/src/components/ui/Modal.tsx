@@ -7,10 +7,15 @@ type ModalProps = {
   description?: string;
   onClose: () => void;
   children: ReactNode;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 };
 
-const sizes = { sm: "max-w-md", md: "max-w-xl", lg: "max-w-2xl" };
+const sizes = {
+  sm: "max-w-md",
+  md: "max-w-xl",
+  lg: "max-w-2xl",
+  xl: "max-w-[min(96vw,1400px)]",
+};
 
 export function Modal({
   open,
