@@ -1,5 +1,5 @@
 export const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
-export const PAGE_SIZE = 20;
+export const PAGE_SIZE = 25;
 
 export const ALLOWED_AUDIO_TYPES = new Set([
   "audio/mpeg",

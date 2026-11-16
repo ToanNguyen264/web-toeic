@@ -5,7 +5,6 @@ import {
   Languages,
   LibraryBig,
   ListMusic,
-  Plus,
   RefreshCw,
   Search,
   Sparkles,
@@ -18,6 +17,8 @@ import { AppShell } from "../components/layout/AppShell";
 import { Button } from "../components/ui/Button";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { Pagination } from "../components/vocabulary/Pagination";
+import { AddVocabularyButton } from "../components/vocabulary/AddVocabularyButton";
+import { NowPlayingPanel } from "../components/vocabulary/NowPlayingPanel";
 import { VocabularyFormModal } from "../components/vocabulary/VocabularyFormModal";
 import { VocabularyList } from "../components/vocabulary/VocabularyList";
 import { useAuth } from "../hooks/useAuth";
@@ -47,6 +48,8 @@ type PlaylistTrack = {
   kind: "word" | "example" | "meaning";
   hasStoredAudio?: boolean;
   label: string;
+  english: string;
+  vietnamese: string;
 };
 
 type PlaylistMode = "word-example" | "word-meaning";
@@ -55,6 +58,8 @@ type PlaylistProgress = {
   current: number;
   total: number;
   label: string;
+  english: string;
+  vietnamese: string;
   repetition: number;
   repetitionTotal: number;
 };
@@ -86,6 +91,8 @@ export default function VocabularyPage() {
   const playlistSkippedRef = useRef(0);
   const playlistDelayRef = useRef<number | null>(null);
   const playlistModeRef = useRef<PlaylistMode | null>(null);
+  const playlistCycleStartSkippedRef = useRef(0);
+  const playlistUrlsRef = useRef(new Map<string, string>());
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -108,10 +115,12 @@ export default function VocabularyPage() {
       audio.removeAttribute("src");
       audio.load();
     }
-    if (playlistUrlRef.current) {
-      URL.revokeObjectURL(playlistUrlRef.current);
-      playlistUrlRef.current = null;
-    }
+    playlistUrlRef.current = null;
+  }
+
+  function clearPlaylistUrls() {
+    playlistUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    playlistUrlsRef.current.clear();
   }
 
   function stopPlaylist(showMessage = false) {
@@ -121,6 +130,7 @@ export default function VocabularyPage() {
       playlistDelayRef.current = null;
     }
     releasePlaylistAudio();
+    clearPlaylistUrls();
     playlistTracksRef.current = [];
     setPlaylistPreparing(false);
     setPlaylistPlaying(false);
@@ -128,6 +138,7 @@ export default function VocabularyPage() {
     playlistModeRef.current = null;
     setPlaylistProgress(null);
     setActiveAudioId(null);
+    playlistCycleStartSkippedRef.current = 0;
     if (showMessage) showToast("Đã dừng danh sách phát.", "info");
   }
 
@@ -140,12 +151,14 @@ export default function VocabularyPage() {
       playlistDelayRef.current = null;
     }
     releasePlaylistAudio();
+    clearPlaylistUrls();
     playlistTracksRef.current = [];
     setPlaylistPlaying(false);
     setPlaylistMode(null);
     playlistModeRef.current = null;
     setPlaylistProgress(null);
     setActiveAudioId(null);
+    playlistCycleStartSkippedRef.current = 0;
     showToast(
       skipped > 0
         ? `Đã nghe xong. Có ${skipped} audio không thể phát và đã được bỏ qua.`
@@ -163,6 +176,15 @@ export default function VocabularyPage() {
     if (runId !== playlistRunRef.current) return;
     const tracks = playlistTracksRef.current;
     if (index >= tracks.length) {
+      if (playlistModeRef.current === "word-meaning" && tracks.length > 0) {
+        const failedThisCycle =
+          playlistSkippedRef.current - playlistCycleStartSkippedRef.current;
+        if (failedThisCycle < tracks.length) {
+          playlistCycleStartSkippedRef.current = playlistSkippedRef.current;
+          void playPlaylistTrack(0, runId);
+          return;
+        }
+      }
       finishPlaylist(runId);
       return;
     }
@@ -172,21 +194,31 @@ export default function VocabularyPage() {
       current: index + 1,
       total: tracks.length,
       label: track.label,
+      english: track.english,
+      vietnamese: track.vietnamese,
       repetition: 1,
       repetitionTotal: repeatCount,
     });
 
     let advanced = false;
     try {
-      const url =
-        track.kind === "meaning"
-          ? await getWordMeaningAudioUrl(
-              track.vocabularyId,
-              !track.hasStoredAudio,
-            )
-          : await getAudioUrl(track.vocabularyId, track.kind);
+      let url = playlistUrlsRef.current.get(track.activationId);
+      if (!url) {
+        url =
+          track.kind === "meaning"
+            ? await getWordMeaningAudioUrl(
+                track.vocabularyId,
+                !track.hasStoredAudio,
+              )
+            : await getAudioUrl(track.vocabularyId, track.kind);
+        if (runId !== playlistRunRef.current) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        if (track.kind === "meaning") track.hasStoredAudio = true;
+        playlistUrlsRef.current.set(track.activationId, url);
+      }
       if (runId !== playlistRunRef.current) {
-        URL.revokeObjectURL(url);
         return;
       }
 
@@ -210,6 +242,7 @@ export default function VocabularyPage() {
           track.kind === "word" &&
           nextTrack?.kind === "example" &&
           nextTrack.vocabularyId === track.vocabularyId;
+        const shouldPauseBeforeNextMeaning = !failed && track.kind === "meaning";
 
         if (shouldPauseBeforeExample) {
           setActiveAudioId(null);
@@ -217,6 +250,8 @@ export default function VocabularyPage() {
             current: index + 1,
             total: tracks.length,
             label: `${track.label.split(" · ")[0]} · nghỉ 1 giây trước ví dụ`,
+            english: track.english,
+            vietnamese: track.vietnamese,
             repetition: repeatCount,
             repetitionTotal: repeatCount,
           });
@@ -224,6 +259,23 @@ export default function VocabularyPage() {
             playlistDelayRef.current = null;
             void playPlaylistTrack(index + 1, runId);
           }, 1_000);
+          return;
+        }
+        if (shouldPauseBeforeNextMeaning) {
+          setActiveAudioId(null);
+          setPlaylistProgress({
+            current: index + 1,
+            total: tracks.length,
+            label: `${track.english} · nghỉ 1,5 giây trước từ tiếp theo`,
+            english: track.english,
+            vietnamese: track.vietnamese,
+            repetition: repeatCount,
+            repetitionTotal: repeatCount,
+          });
+          playlistDelayRef.current = window.setTimeout(() => {
+            playlistDelayRef.current = null;
+            void playPlaylistTrack(index + 1, runId);
+          }, 1_500);
           return;
         }
         void playPlaylistTrack(index + 1, runId);
@@ -235,6 +287,8 @@ export default function VocabularyPage() {
             current: index + 1,
             total: tracks.length,
             label: track.label,
+            english: track.english,
+            vietnamese: track.vietnamese,
             repetition: completedRepetitions + 1,
             repetitionTotal: repeatCount,
           });
@@ -268,6 +322,8 @@ export default function VocabularyPage() {
     playlistModeRef.current = mode;
     setActiveAudioId(null);
     playlistSkippedRef.current = 0;
+    playlistCycleStartSkippedRef.current = 0;
+    clearPlaylistUrls();
 
     try {
       const vocabularies = await listAllVocabularies(user.id, search, status);
@@ -281,6 +337,8 @@ export default function VocabularyPage() {
               kind: "meaning",
               hasStoredAudio: Boolean(item.word_meaning_audio_path),
               label: `${item.english_word} · từ và nghĩa`,
+              english: item.english_word,
+              vietnamese: item.vietnamese_meaning,
             },
           ];
         }
@@ -291,12 +349,16 @@ export default function VocabularyPage() {
             vocabularyId: item.id,
             kind: "word",
             label: `${item.english_word} · từ vựng`,
+            english: item.english_word,
+            vietnamese: item.vietnamese_meaning,
           },
           {
             activationId: `${item.id}:example`,
             vocabularyId: item.id,
             kind: "example",
             label: `${item.english_word} · ví dụ`,
+            english: item.example_english || item.english_word,
+            vietnamese: item.example_vietnamese || item.vietnamese_meaning,
           },
         ];
       });
@@ -345,6 +407,7 @@ export default function VocabularyPage() {
         window.clearTimeout(playlistDelayRef.current);
       }
       if (playlistUrlRef.current) URL.revokeObjectURL(playlistUrlRef.current);
+      clearPlaylistUrls();
     },
     [],
   );
@@ -461,7 +524,7 @@ export default function VocabularyPage() {
   return (
     <AppShell>
       <section className="mb-7 overflow-hidden rounded-[28px] bg-gradient-to-r from-indigo-700 via-violet-700 to-cyan-700 p-6 text-white shadow-xl shadow-indigo-900/15 sm:p-8">
-        <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+        <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)] lg:items-center">
           <div className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border border-white/10 bg-white/10 blur-2xl" />
           <div className="relative max-w-2xl">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur">
@@ -475,13 +538,18 @@ export default function VocabularyPage() {
               Quản lý từ tiếng Anh, nghĩa tiếng Việt và phát âm trong cùng một nơi.
             </p>
           </div>
-          <Button
-            onClick={openCreate}
-            className="relative shrink-0 !bg-white !bg-none !text-indigo-700 shadow-white/10 hover:!bg-indigo-50"
-          >
-            <Plus className="h-4 w-4" />
-            Thêm từ mới
-          </Button>
+          <div className="relative flex flex-col gap-3">
+            <NowPlayingPanel
+              playing={playlistPlaying}
+              preparing={playlistPreparing}
+              english={playlistProgress?.english}
+              vietnamese={playlistProgress?.vietnamese}
+              current={playlistProgress?.current}
+              total={playlistProgress?.total}
+              continuous={playlistMode === "word-meaning"}
+            />
+            <AddVocabularyButton onClick={openCreate} />
+          </div>
         </div>
       </section>
 
