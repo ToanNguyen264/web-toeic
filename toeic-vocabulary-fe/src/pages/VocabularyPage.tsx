@@ -54,7 +54,7 @@ export default function VocabularyPage() {
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE));
 
   const audioCount = useMemo(
-    () => data?.items.filter((item) => item.audio_path).length ?? 0,
+    () => data?.items.filter((item) => item.audio_path || item.example_audio_path).length ?? 0,
     [data?.items],
   );
 
@@ -119,7 +119,11 @@ export default function VocabularyPage() {
     if (!pendingDelete) return;
     try {
       await deleteMutation.mutateAsync(pendingDelete);
-      setActiveAudioId((current) => (current === pendingDelete.id ? null : current));
+      setActiveAudioId((current) =>
+        current === pendingDelete.id || current === `${pendingDelete.id}:example`
+          ? null
+          : current,
+      );
       if ((data?.items.length ?? 0) === 1 && page > 1) setPage((current) => current - 1);
       await queryClient.invalidateQueries({ queryKey: ["vocabularies", user?.id] });
       showToast(`Đã xóa “${pendingDelete.english_word}”.`, "success");

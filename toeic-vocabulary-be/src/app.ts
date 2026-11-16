@@ -6,6 +6,7 @@ import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.middleware.js";
 import { aiRouter } from "./routes/ai.routes.js";
+import { adminRouter } from "./routes/admin.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { healthRouter } from "./routes/health.routes.js";
 import { vocabularyRouter } from "./routes/vocabulary.routes.js";
@@ -29,6 +30,7 @@ app.use(cookieParser());
 
 app.use("/api/health", healthRouter);
 app.use("/api/auth", authRouter);
+app.use("/api/admin", adminRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/vocabularies", vocabularyRouter);
 

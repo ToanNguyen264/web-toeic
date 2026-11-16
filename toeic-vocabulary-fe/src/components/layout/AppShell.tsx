@@ -1,14 +1,16 @@
-import { BookOpenText, LogOut } from "lucide-react";
-import type { ReactNode } from "react";
+import { BookOpenText, KeyRound, LogOut } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { useToast } from "../../hooks/useToast";
 import { toUserMessage } from "../../utils/errors";
 import { BrandMark } from "../ui/BrandMark";
 import { ThemeToggle } from "../ui/ThemeToggle";
+import { AiSettingsModal } from "../admin/AiSettingsModal";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
   const { showToast } = useToast();
+  const [showAiSettings, setShowAiSettings] = useState(false);
 
   async function handleSignOut() {
     try {
@@ -34,6 +36,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {user?.email}
               </span>
             </div>
+            {user?.is_admin && (
+              <button
+                type="button"
+                onClick={() => setShowAiSettings(true)}
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 text-sm font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
+                aria-label="Cấu hình API AI"
+              >
+                <KeyRound className="h-4 w-4" />
+                <span className="hidden lg:inline">Cấu hình AI</span>
+              </button>
+            )}
             <ThemeToggle />
             <button
               type="button"
@@ -50,6 +63,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="relative mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
         {children}
       </main>
+      {user?.is_admin && (
+        <AiSettingsModal
+          open={showAiSettings}
+          onClose={() => setShowAiSettings(false)}
+        />
+      )}
     </div>
   );
 }

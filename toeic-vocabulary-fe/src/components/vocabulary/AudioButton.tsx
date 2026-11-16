@@ -9,6 +9,7 @@ type AudioButtonProps = {
   isActive: boolean;
   onActivate: (id: string | null) => void;
   compact?: boolean;
+  kind?: "word" | "example";
 };
 
 export function AudioButton({
@@ -18,6 +19,7 @@ export function AudioButton({
   isActive,
   onActivate,
   compact = false,
+  kind = "word",
 }: AudioButtonProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -62,11 +64,12 @@ export function AudioButton({
       setLoading(true);
       let url = audioUrl;
       if (!url) {
-        url = await getAudioUrl(id);
+        url = await getAudioUrl(id, kind);
         setAudioUrl(url);
       }
 
-      onActivate(id);
+      const activationId = kind === "example" ? `${id}:example` : id;
+      onActivate(activationId);
       if (!audioRef.current) {
         audioRef.current = new Audio(url);
         audioRef.current.preload = "metadata";

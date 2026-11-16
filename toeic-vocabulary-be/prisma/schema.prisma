@@ -42,6 +42,12 @@ model Vocabulary {
   audioName         String?  @map("audio_name") @db.VarChar(255)
   audioType         String?  @map("audio_type") @db.VarChar(100)
   audioSize         BigInt?  @map("audio_size") @db.UnsignedBigInt
+  exampleEnglish    String?  @map("example_english") @db.VarChar(500)
+  exampleVietnamese String?  @map("example_vietnamese") @db.VarChar(1000)
+  exampleAudioPath  String?  @map("example_audio_path") @db.VarChar(500)
+  exampleAudioName  String?  @map("example_audio_name") @db.VarChar(255)
+  exampleAudioType  String?  @map("example_audio_type") @db.VarChar(100)
+  exampleAudioSize  BigInt?  @map("example_audio_size") @db.UnsignedBigInt
   createdAt         DateTime @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt         DateTime @updatedAt @map("updated_at") @db.DateTime(3)
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -49,4 +55,14 @@ model Vocabulary {
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, normalizedWord])
   @@map("vocabularies")
+}
+
+model AppSetting {
+  key            String   @id @db.VarChar(100)
+  encryptedValue String   @map("encrypted_value") @db.Text
+  iv             String   @db.VarChar(32)
+  authTag        String   @map("auth_tag") @db.VarChar(32)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@map("app_settings")
 }

@@ -1,6 +1,6 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api").replace(/\/$/, "");
 
-export type AuthUser = { id: string; email: string };
+export type AuthUser = { id: string; email: string; is_admin: boolean };
 export type AuthResponse = { user: AuthUser; accessToken: string };
 
 export class ApiError extends Error {

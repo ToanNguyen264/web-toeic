@@ -21,12 +21,19 @@ const envSchema = z.object({
   ACCESS_TOKEN_TTL: z.string().default("15m"),
   REFRESH_TOKEN_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   COOKIE_SECURE: booleanFromString,
+  ADMIN_EMAIL: z.string().trim().toLowerCase().email().default("toan@gmail.com"),
   AUDIO_STORAGE_DIR: z.string().min(1).default("./uploads/audio"),
   ELEVENLABS_API_KEY: z.string().trim().default(""),
   ELEVENLABS_VOICE_ID: z.string().trim().default(""),
   ELEVENLABS_MODEL_ID: z.string().trim().min(1).default("eleven_flash_v2_5"),
+  ELEVENLABS_VI_VOICE_ID: z.string().trim().default(""),
+  ELEVENLABS_VI_MODEL_ID: z.string().trim().min(1).default("eleven_flash_v2_5"),
   ELEVENLABS_API_BASE_URL: z.string().url().default("https://api.elevenlabs.io"),
   ELEVENLABS_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(15_000),
+  GEMINI_API_KEY: z.string().trim().default(""),
+  GEMINI_MODEL: z.string().trim().min(1).default("gemini-3.1-flash-lite"),
+  GEMINI_API_BASE_URL: z.string().url().default("https://generativelanguage.googleapis.com"),
+  GEMINI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(20_000),
 });
 
 const parsed = envSchema.safeParse(process.env);

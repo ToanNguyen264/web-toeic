@@ -13,8 +13,12 @@ function formDataFor(values: VocabularyFormValues) {
   const formData = new FormData();
   formData.set("englishWord", values.englishWord);
   formData.set("vietnameseMeaning", values.vietnameseMeaning);
+  formData.set("exampleEnglish", values.exampleEnglish);
+  formData.set("exampleVietnamese", values.exampleVietnamese);
   formData.set("removeCurrentAudio", String(values.removeCurrentAudio));
+  formData.set("removeCurrentExampleAudio", String(values.removeCurrentExampleAudio));
   if (values.audioFile) formData.set("audio", values.audioFile);
+  if (values.exampleAudioFile) formData.set("exampleAudio", values.exampleAudioFile);
   return formData;
 }
 
@@ -51,7 +55,8 @@ export async function deleteVocabulary(_userId: string, vocabulary: Vocabulary) 
   await apiRequest<void>(`/vocabularies/${vocabulary.id}`, { method: "DELETE" });
 }
 
-export async function getAudioUrl(vocabularyId: string) {
-  const blob = await fetchProtectedBlob(`/vocabularies/${vocabularyId}/audio`);
+export async function getAudioUrl(vocabularyId: string, kind: "word" | "example" = "word") {
+  const suffix = kind === "example" ? "/example-audio" : "/audio";
+  const blob = await fetchProtectedBlob(`/vocabularies/${vocabularyId}${suffix}`);
   return URL.createObjectURL(blob);
 }

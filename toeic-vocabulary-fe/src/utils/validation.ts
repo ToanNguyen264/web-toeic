@@ -63,10 +63,19 @@ export function formatFileSize(bytes: number | null) {
 export function validateVocabularyFields(
   englishWord: string,
   vietnameseMeaning: string,
+  exampleEnglish = "",
+  exampleVietnamese = "",
 ) {
-  const errors: { englishWord?: string; vietnameseMeaning?: string } = {};
+  const errors: {
+    englishWord?: string;
+    vietnameseMeaning?: string;
+    exampleEnglish?: string;
+    exampleVietnamese?: string;
+  } = {};
   const english = cleanText(englishWord);
   const vietnamese = cleanText(vietnameseMeaning);
+  const exampleEn = cleanText(exampleEnglish);
+  const exampleVi = cleanText(exampleVietnamese);
 
   if (!english) errors.englishWord = "Vui lòng nhập từ tiếng Anh.";
   else if (english.length > 150)
@@ -77,6 +86,15 @@ export function validateVocabularyFields(
   else if (vietnamese.length > 1000)
     errors.vietnameseMeaning =
       "Nghĩa tiếng Việt không được vượt quá 1.000 ký tự.";
+
+  if (exampleEn.length > 500)
+    errors.exampleEnglish = "Câu ví dụ tiếng Anh không được vượt quá 500 ký tự.";
+  if (exampleVi.length > 1000)
+    errors.exampleVietnamese = "Nghĩa câu ví dụ không được vượt quá 1.000 ký tự.";
+  if (Boolean(exampleEn) !== Boolean(exampleVi)) {
+    if (!exampleEn) errors.exampleEnglish = "Vui lòng nhập câu ví dụ tiếng Anh.";
+    if (!exampleVi) errors.exampleVietnamese = "Vui lòng nhập nghĩa tiếng Việt của câu ví dụ.";
+  }
 
   return errors;
 }

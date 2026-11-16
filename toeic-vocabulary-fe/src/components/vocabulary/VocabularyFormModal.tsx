@@ -1,4 +1,12 @@
-import { FileAudio, Headphones, UploadCloud, WandSparkles, X } from "lucide-react";
+import {
+  BookOpenText,
+  FileAudio,
+  Headphones,
+  Languages,
+  UploadCloud,
+  WandSparkles,
+  X,
+} from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -10,7 +18,11 @@ import type {
   Vocabulary,
   VocabularyFormValues,
 } from "../../types/vocabulary";
-import { generateVocabularyAudio } from "../../services/tts.service";
+import {
+  generateToeicExample,
+  generateToeicExampleAudio,
+  generateVocabularyAudio,
+} from "../../services/tts.service";
 import { toUserMessage } from "../../utils/errors";
 import {
   cleanText,
@@ -26,6 +38,9 @@ type FormErrors = {
   englishWord?: string;
   vietnameseMeaning?: string;
   audio?: string;
+  exampleEnglish?: string;
+  exampleVietnamese?: string;
+  exampleAudio?: string;
 };
 
 type VocabularyFormModalProps = {
@@ -49,14 +64,31 @@ export function VocabularyFormModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeCurrentAudio, setRemoveCurrentAudio] = useState(false);
   const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [exampleEnglish, setExampleEnglish] = useState(vocabulary?.example_english ?? "");
+  const [exampleVietnamese, setExampleVietnamese] = useState(
+    vocabulary?.example_vietnamese ?? "",
+  );
+  const [exampleAudioFile, setExampleAudioFile] = useState<File | null>(null);
+  const [examplePreviewUrl, setExamplePreviewUrl] = useState<string | null>(null);
+  const [removeCurrentExampleAudio, setRemoveCurrentExampleAudio] = useState(false);
+  const [generatingExample, setGeneratingExample] = useState(false);
+  const [generatingExampleAudio, setGeneratingExampleAudio] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const busy = loading || generatingAudio || generatingExample || generatingExampleAudio;
 
   useEffect(
     () => () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     },
     [previewUrl],
+  );
+
+  useEffect(
+    () => () => {
+      if (examplePreviewUrl) URL.revokeObjectURL(examplePreviewUrl);
+    },
+    [examplePreviewUrl],
   );
 
   function setFile(file: File | null) {
@@ -75,6 +107,35 @@ export function VocabularyFormModal({
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     setFile(event.target.files?.[0] ?? null);
+  }
+
+  function setExampleFile(file: File | null) {
+    if (examplePreviewUrl) URL.revokeObjectURL(examplePreviewUrl);
+    const audioError = validateAudioFile(file);
+    setErrors((current) => ({ ...current, exampleAudio: audioError ?? undefined }));
+    if (audioError || !file) {
+      setExampleAudioFile(null);
+      setExamplePreviewUrl(null);
+      return;
+    }
+    setExampleAudioFile(file);
+    setExamplePreviewUrl(URL.createObjectURL(file));
+    setRemoveCurrentExampleAudio(false);
+  }
+
+  function invalidateExampleAudio() {
+    if (exampleAudioFile) setExampleFile(null);
+    if (vocabulary?.example_audio_path) setRemoveCurrentExampleAudio(true);
+  }
+
+  function handleExampleEnglishChange(value: string) {
+    if (value !== exampleEnglish) invalidateExampleAudio();
+    setExampleEnglish(value);
+  }
+
+  function handleExampleVietnameseChange(value: string) {
+    if (value !== exampleVietnamese) invalidateExampleAudio();
+    setExampleVietnamese(value);
   }
 
   async function handleGenerateAudio() {
@@ -111,13 +172,94 @@ export function VocabularyFormModal({
     }
   }
 
+  async function handleGenerateExample() {
+    const word = cleanText(englishWord);
+    const meaning = cleanText(vietnameseMeaning);
+    if (!word || !meaning) {
+      setErrors((current) => ({
+        ...current,
+        englishWord: word ? undefined : "Vui lòng nhập từ tiếng Anh trước.",
+        vietnameseMeaning: meaning ? undefined : "Vui lòng nhập nghĩa tiếng Việt trước.",
+      }));
+      return;
+    }
+
+    setGeneratingExample(true);
+    setErrors((current) => ({
+      ...current,
+      englishWord: undefined,
+      vietnameseMeaning: undefined,
+      exampleEnglish: undefined,
+      exampleVietnamese: undefined,
+    }));
+    try {
+      const example = await generateToeicExample(word, meaning);
+      invalidateExampleAudio();
+      setExampleEnglish(example.english);
+      setExampleVietnamese(example.vietnamese);
+    } catch (error) {
+      setErrors((current) => ({
+        ...current,
+        exampleEnglish: toUserMessage(
+          error,
+          "Không thể tạo câu ví dụ TOEIC. Vui lòng thử lại.",
+        ),
+      }));
+    } finally {
+      setGeneratingExample(false);
+    }
+  }
+
+  async function handleGenerateExampleAudio() {
+    const english = cleanText(exampleEnglish);
+    const vietnamese = cleanText(exampleVietnamese);
+    if (!english || !vietnamese) {
+      setErrors((current) => ({
+        ...current,
+        exampleEnglish: english ? undefined : "Vui lòng nhập câu ví dụ tiếng Anh.",
+        exampleVietnamese: vietnamese ? undefined : "Vui lòng nhập nghĩa câu ví dụ.",
+      }));
+      return;
+    }
+
+    setGeneratingExampleAudio(true);
+    setErrors((current) => ({ ...current, exampleAudio: undefined }));
+    try {
+      const blob = await generateToeicExampleAudio(english, vietnamese);
+      const safeName =
+        cleanText(englishWord)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "") || "toeic-example";
+      setExampleFile(
+        new File([blob], `${safeName}-example.mp3`, {
+          type: blob.type || "audio/mpeg",
+        }),
+      );
+    } catch (error) {
+      setErrors((current) => ({
+        ...current,
+        exampleAudio: toUserMessage(error, "Không thể tạo audio ví dụ."),
+      }));
+    } finally {
+      setGeneratingExampleAudio(false);
+    }
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const fieldErrors = validateVocabularyFields(englishWord, vietnameseMeaning);
+    const fieldErrors = validateVocabularyFields(
+      englishWord,
+      vietnameseMeaning,
+      exampleEnglish,
+      exampleVietnamese,
+    );
     const audioError = validateAudioFile(audioFile);
+    const exampleAudioError = validateAudioFile(exampleAudioFile);
     const nextErrors: FormErrors = {
       ...fieldErrors,
       audio: audioError ?? undefined,
+      exampleAudio: exampleAudioError ?? undefined,
     };
     setErrors(nextErrors);
     if (Object.values(nextErrors).some(Boolean)) return;
@@ -127,6 +269,10 @@ export function VocabularyFormModal({
       vietnameseMeaning: cleanText(vietnameseMeaning),
       audioFile,
       removeCurrentAudio,
+      exampleEnglish: cleanText(exampleEnglish),
+      exampleVietnamese: cleanText(exampleVietnamese),
+      exampleAudioFile,
+      removeCurrentExampleAudio,
     });
   }
 
@@ -134,9 +280,9 @@ export function VocabularyFormModal({
     <Modal
       open
       title={vocabulary ? "Chỉnh sửa từ vựng" : "Thêm từ mới"}
-      description="Lưu từ, nghĩa và file phát âm để nghe lại bất cứ lúc nào."
+      description="Lưu từ, nghĩa, câu ví dụ TOEIC và audio để luyện nghe."
       onClose={() => {
-        if (!loading && !generatingAudio) onClose();
+        if (!busy) onClose();
       }}
       size="lg"
     >
@@ -180,6 +326,155 @@ export function VocabularyFormModal({
               </p>
             )}
           </div>
+
+          <section className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4 dark:border-violet-900 dark:bg-violet-950/20 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-violet-600 shadow-sm dark:bg-slate-900 dark:text-violet-300">
+                  <BookOpenText className="h-5 w-5" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+                    Ví dụ theo chủ đề TOEIC
+                  </h3>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Có thể chỉnh lại nội dung trước khi tạo audio.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                className="shrink-0 border-violet-200 text-violet-700 dark:border-violet-800 dark:text-violet-300"
+                onClick={handleGenerateExample}
+                loading={generatingExample}
+                disabled={busy || !cleanText(englishWord) || !cleanText(vietnameseMeaning)}
+              >
+                {!generatingExample && <WandSparkles className="h-4 w-4" />}
+                {exampleEnglish ? "Tạo câu khác" : "Tạo bằng Gemini"}
+              </Button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div>
+                <label
+                  htmlFor="example-english"
+                  className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200"
+                >
+                  Câu tiếng Anh
+                </label>
+                <textarea
+                  id="example-english"
+                  rows={3}
+                  maxLength={500}
+                  value={exampleEnglish}
+                  onChange={(event) => handleExampleEnglishChange(event.target.value)}
+                  placeholder="Gemini sẽ tạo một câu trong bối cảnh TOEIC…"
+                  aria-invalid={Boolean(errors.exampleEnglish)}
+                  className={`w-full resize-none rounded-xl border bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 dark:bg-slate-900 dark:text-white ${
+                    errors.exampleEnglish
+                      ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/10"
+                      : "border-violet-100 focus:border-violet-500 focus:ring-violet-500/10 dark:border-violet-900"
+                  }`}
+                />
+                {errors.exampleEnglish && (
+                  <p className="mt-1.5 text-xs font-medium text-rose-600">
+                    {errors.exampleEnglish}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label
+                  htmlFor="example-vietnamese"
+                  className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200"
+                >
+                  Nghĩa tiếng Việt
+                </label>
+                <textarea
+                  id="example-vietnamese"
+                  rows={3}
+                  maxLength={1000}
+                  value={exampleVietnamese}
+                  onChange={(event) => handleExampleVietnameseChange(event.target.value)}
+                  placeholder="Bản dịch tiếng Việt của câu ví dụ…"
+                  aria-invalid={Boolean(errors.exampleVietnamese)}
+                  className={`w-full resize-none rounded-xl border bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 dark:bg-slate-900 dark:text-white ${
+                    errors.exampleVietnamese
+                      ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/10"
+                      : "border-violet-100 focus:border-violet-500 focus:ring-violet-500/10 dark:border-violet-900"
+                  }`}
+                />
+                {errors.exampleVietnamese && (
+                  <p className="mt-1.5 text-xs font-medium text-rose-600">
+                    {errors.exampleVietnamese}
+                  </p>
+                )}
+              </div>
+
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full border-cyan-200 text-cyan-700 dark:border-cyan-900 dark:text-cyan-300"
+                onClick={handleGenerateExampleAudio}
+                loading={generatingExampleAudio}
+                disabled={busy || !cleanText(exampleEnglish) || !cleanText(exampleVietnamese)}
+              >
+                {!generatingExampleAudio && <Languages className="h-4 w-4" />}
+                {exampleAudioFile ? "Tạo lại audio ví dụ" : "Tạo audio Anh → nghỉ 1,5 giây → Việt"}
+              </Button>
+
+              {exampleAudioFile && examplePreviewUrl && (
+                <div className="rounded-xl border border-cyan-100 bg-white p-3 dark:border-cyan-900 dark:bg-slate-900">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">
+                        {exampleAudioFile.name}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {formatFileSize(exampleAudioFile.size)} · Sẵn sàng lưu
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setExampleFile(null)}
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
+                      aria-label="Bỏ audio ví dụ vừa tạo"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <audio
+                    className="mt-3 h-10 w-full"
+                    controls
+                    preload="metadata"
+                    src={examplePreviewUrl}
+                  >
+                    Trình duyệt không hỗ trợ phát audio.
+                  </audio>
+                </div>
+              )}
+
+              {errors.exampleAudio && (
+                <p className="text-xs font-medium text-rose-600">{errors.exampleAudio}</p>
+              )}
+
+              {vocabulary?.example_audio_path && !exampleAudioFile && (
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-violet-100 bg-white p-3 text-sm text-slate-600 dark:border-violet-900 dark:bg-slate-900 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={removeCurrentExampleAudio}
+                    onChange={(event) => setRemoveCurrentExampleAudio(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 accent-rose-600"
+                  />
+                  <Headphones className="h-4 w-4 text-violet-500" />
+                  <span className="min-w-0 flex-1 truncate">
+                    Xóa audio ví dụ hiện tại
+                  </span>
+                </label>
+              )}
+            </div>
+          </section>
 
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
@@ -262,7 +557,7 @@ export function VocabularyFormModal({
               className="mt-3 w-full border-indigo-200 text-indigo-700 dark:border-indigo-800 dark:text-indigo-300"
               onClick={handleGenerateAudio}
               loading={generatingAudio}
-              disabled={loading || !cleanText(englishWord)}
+              disabled={busy || !cleanText(englishWord)}
             >
               {!generatingAudio && <WandSparkles className="h-4 w-4" />}
               {audioFile ? "Tạo lại audio bằng AI" : "Tạo audio bằng AI"}
@@ -289,10 +584,10 @@ export function VocabularyFormModal({
         </div>
 
         <div className="flex flex-col-reverse gap-3 border-t border-slate-100 bg-slate-50/70 px-5 py-4 dark:border-slate-800 dark:bg-slate-950/40 sm:flex-row sm:justify-end sm:px-6">
-          <Button type="button" variant="secondary" onClick={onClose} disabled={loading || generatingAudio}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={busy}>
             Hủy
           </Button>
-          <Button type="submit" loading={loading} disabled={generatingAudio}>
+          <Button type="submit" loading={loading} disabled={busy && !loading}>
             {vocabulary ? "Lưu thay đổi" : "Thêm từ vựng"}
           </Button>
         </div>

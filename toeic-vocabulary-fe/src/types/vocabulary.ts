@@ -8,6 +8,12 @@ export type Vocabulary = {
   audio_name: string | null;
   audio_type: string | null;
   audio_size: number | null;
+  example_english: string | null;
+  example_vietnamese: string | null;
+  example_audio_path: string | null;
+  example_audio_name: string | null;
+  example_audio_type: string | null;
+  example_audio_size: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -17,6 +23,10 @@ export type VocabularyFormValues = {
   vietnameseMeaning: string;
   audioFile: File | null;
   removeCurrentAudio: boolean;
+  exampleEnglish: string;
+  exampleVietnamese: string;
+  exampleAudioFile: File | null;
+  removeCurrentExampleAudio: boolean;
 };
 
 export type VocabularyPage = {

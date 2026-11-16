@@ -1,4 +1,4 @@
-import { Edit3, Inbox, MoreHorizontal, Trash2, Volume2 } from "lucide-react";
+import { BookOpenText, Edit3, Inbox, MoreHorizontal, Trash2, Volume2 } from "lucide-react";
 import type { Vocabulary } from "../../types/vocabulary";
 import { formatFileSize } from "../../utils/validation";
 import { AudioButton } from "./AudioButton";
@@ -20,10 +20,11 @@ function VocabularySkeleton() {
       {Array.from({ length: 5 }).map((_, index) => (
         <div
           key={index}
-          className="grid animate-pulse grid-cols-[1fr_1.2fr_150px_80px] gap-5 border-b border-slate-100 py-4 last:border-0 dark:border-slate-800"
+          className="grid animate-pulse grid-cols-[0.8fr_1fr_1.5fr_140px_80px] gap-5 border-b border-slate-100 py-4 last:border-0 dark:border-slate-800"
         >
           <span className="h-5 rounded bg-slate-200 dark:bg-slate-800" />
           <span className="h-5 rounded bg-slate-100 dark:bg-slate-800" />
+          <span className="h-12 rounded bg-slate-100 dark:bg-slate-800" />
           <span className="h-9 rounded-xl bg-slate-100 dark:bg-slate-800" />
           <span className="h-9 rounded-xl bg-slate-100 dark:bg-slate-800" />
         </div>
@@ -79,6 +80,7 @@ export function VocabularyList({
             <tr className="border-b border-slate-100 bg-slate-50/70 text-xs font-bold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
               <th className="px-6 py-4">Tiếng Anh</th>
               <th className="px-6 py-4">Tiếng Việt</th>
+              <th className="px-6 py-4">Ví dụ TOEIC</th>
               <th className="px-6 py-4">Audio</th>
               <th className="px-6 py-4 text-right">Thao tác</th>
             </tr>
@@ -98,6 +100,31 @@ export function VocabularyList({
                 </td>
                 <td className="max-w-md px-6 py-5 align-top text-sm leading-6 text-slate-600 dark:text-slate-300">
                   {item.vietnamese_meaning}
+                </td>
+                <td className="max-w-lg px-6 py-5 align-top">
+                  {item.example_english ? (
+                    <div className="space-y-2">
+                      <p className="text-sm font-semibold leading-6 text-slate-800 dark:text-slate-100">
+                        {item.example_english}
+                      </p>
+                      <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
+                        {item.example_vietnamese}
+                      </p>
+                      <AudioButton
+                        id={item.id}
+                        kind="example"
+                        path={item.example_audio_path}
+                        name={item.example_audio_name}
+                        isActive={activeAudioId === `${item.id}:example`}
+                        onActivate={onActivateAudio}
+                        compact
+                      />
+                    </div>
+                  ) : (
+                    <span className="inline-flex items-center gap-2 text-xs text-slate-400">
+                      <BookOpenText className="h-4 w-4" /> Chưa có ví dụ
+                    </span>
+                  )}
                 </td>
                 <td className="px-6 py-5 align-top">
                   <AudioButton
@@ -155,6 +182,32 @@ export function VocabularyList({
               </div>
               <MoreHorizontal className="mt-1 h-5 w-5 shrink-0 text-slate-300" />
             </div>
+            {item.example_english && (
+              <div className="mt-4 rounded-2xl border border-violet-100 bg-violet-50/60 p-3.5 dark:border-violet-900 dark:bg-violet-950/20">
+                <div className="flex items-start gap-3">
+                  <BookOpenText className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold leading-6 text-slate-800 dark:text-slate-100">
+                      {item.example_english}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      {item.example_vietnamese}
+                    </p>
+                    <div className="mt-2">
+                      <AudioButton
+                        id={item.id}
+                        kind="example"
+                        path={item.example_audio_path}
+                        name={item.example_audio_name}
+                        isActive={activeAudioId === `${item.id}:example`}
+                        onActivate={onActivateAudio}
+                        compact
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3 dark:bg-slate-900">
               <AudioButton
                 id={item.id}

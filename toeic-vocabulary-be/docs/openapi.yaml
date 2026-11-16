@@ -1,15 +1,16 @@
 openapi: 3.1.0
 info:
   title: TOEIC Vocabulary API
-  version: 1.1.0
-  description: API xác thực, quản lý từ vựng cá nhân và audio phát âm.
+  version: 1.2.0
+  description: API xác thực, quản lý từ vựng, ví dụ TOEIC và audio luyện nghe.
 servers:
   - url: http://localhost:3000/api
 security: []
 tags:
   - name: System
   - name: Auth
-  - name: AI Audio
+  - name: Admin
+  - name: AI Content
   - name: Vocabularies
 paths:
   /health:
@@ -81,6 +82,42 @@ paths:
                 required: [user]
                 properties: { user: { $ref: "#/components/schemas/User" } }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /admin/ai-settings:
+    get:
+      tags: [Admin]
+      summary: Xem trạng thái API key đã che kín
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Trạng thái cấu hình AI
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiSettingsStatus" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [Admin]
+      summary: Thay ElevenLabs hoặc Gemini API key
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                elevenlabsApiKey: { type: string, minLength: 10, maxLength: 500, format: password }
+                geminiApiKey: { type: string, minLength: 10, maxLength: 500, format: password }
+      responses:
+        "200":
+          description: Trạng thái sau khi cập nhật
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiSettingsStatus" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /vocabularies:
     get:
       tags: [Vocabularies]
@@ -165,9 +202,21 @@ paths:
             audio/ogg: { schema: { type: string, format: binary } }
             audio/webm: { schema: { type: string, format: binary } }
         "404": { $ref: "#/components/responses/NotFound" }
+  /vocabularies/{id}/example-audio:
+    get:
+      tags: [Vocabularies]
+      summary: Phát audio câu ví dụ song ngữ riêng tư
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/VocabularyId" }]
+      responses:
+        "200":
+          description: Audio đọc câu tiếng Anh, nghỉ 1,5 giây rồi đọc nghĩa tiếng Việt
+          content:
+            audio/mpeg: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
   /ai/audio:
     post:
-      tags: [AI Audio]
+      tags: [AI Content]
       summary: Tạo file MP3 phát âm tiếng Anh bằng ElevenLabs
       description: File trả về được giữ tạm ở trình duyệt và chỉ được lưu khi người dùng lưu từ vựng.
       security: [{ bearerAuth: [] }]
@@ -186,6 +235,67 @@ paths:
           description: Audio MP3 đã tạo
           headers:
             Cache-Control: { schema: { type: string, const: no-store } }
+          content:
+            audio/mpeg: { schema: { type: string, format: binary } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/ServiceError" }
+        "502": { $ref: "#/components/responses/ServiceError" }
+        "503": { $ref: "#/components/responses/ServiceError" }
+        "504": { $ref: "#/components/responses/ServiceError" }
+  /ai/example:
+    post:
+      tags: [AI Content]
+      summary: Tạo câu ví dụ TOEIC và bản dịch bằng Gemini
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [word, meaning]
+              properties:
+                word: { type: string, minLength: 1, maxLength: 150, examples: [invoice] }
+                meaning: { type: string, minLength: 1, maxLength: 1000, examples: [hóa đơn] }
+      responses:
+        "200":
+          description: Ví dụ có cấu trúc
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [english, vietnamese, topic]
+                properties:
+                  english: { type: string, maxLength: 500 }
+                  vietnamese: { type: string, maxLength: 1000 }
+                  topic: { type: string }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/ServiceError" }
+        "502": { $ref: "#/components/responses/ServiceError" }
+        "503": { $ref: "#/components/responses/ServiceError" }
+        "504": { $ref: "#/components/responses/ServiceError" }
+  /ai/example-audio:
+    post:
+      tags: [AI Content]
+      summary: Tạo MP3 song ngữ với khoảng nghỉ 1,5 giây bằng ElevenLabs
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [english, vietnamese]
+              properties:
+                english: { type: string, minLength: 1, maxLength: 500 }
+                vietnamese: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        "200":
+          description: Audio MP3 song ngữ
           content:
             audio/mpeg: { schema: { type: string, format: binary } }
         "400": { $ref: "#/components/responses/ValidationError" }
@@ -213,10 +323,25 @@ components:
         password: { type: string, minLength: 8, maxLength: 72, format: password }
     User:
       type: object
-      required: [id, email]
+      required: [id, email, is_admin]
       properties:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
+        is_admin: { type: boolean }
+    ProviderSettingStatus:
+      type: object
+      required: [configured, masked_key, source, updated_at]
+      properties:
+        configured: { type: boolean }
+        masked_key: { type: [string, "null"], description: Chỉ chứa phần key đã che và bốn ký tự cuối. }
+        source: { type: string, enum: [environment, database] }
+        updated_at: { type: [string, "null"], format: date-time }
+    AiSettingsStatus:
+      type: object
+      required: [elevenlabs, gemini]
+      properties:
+        elevenlabs: { $ref: "#/components/schemas/ProviderSettingStatus" }
+        gemini: { $ref: "#/components/schemas/ProviderSettingStatus" }
     AuthResult:
       type: object
       required: [user, accessToken]
@@ -230,7 +355,11 @@ components:
         englishWord: { type: string, minLength: 1, maxLength: 150 }
         vietnameseMeaning: { type: string, minLength: 1, maxLength: 1000 }
         removeCurrentAudio: { type: boolean, default: false }
+        exampleEnglish: { type: string, maxLength: 500 }
+        exampleVietnamese: { type: string, maxLength: 1000 }
+        removeCurrentExampleAudio: { type: boolean, default: false }
         audio: { type: string, format: binary, description: "MP3/M4A/WAV/OGG/WebM, tối đa 5 MB." }
+        exampleAudio: { type: string, format: binary, description: "Audio ví dụ song ngữ, tối đa 5 MB." }
     Vocabulary:
       type: object
       required: [id, user_id, english_word, normalized_word, vietnamese_meaning, created_at, updated_at]
@@ -244,6 +373,12 @@ components:
         audio_name: { type: [string, "null"] }
         audio_type: { type: [string, "null"] }
         audio_size: { type: [integer, "null"] }
+        example_english: { type: [string, "null"] }
+        example_vietnamese: { type: [string, "null"] }
+        example_audio_path: { type: [string, "null"] }
+        example_audio_name: { type: [string, "null"] }
+        example_audio_type: { type: [string, "null"] }
+        example_audio_size: { type: [integer, "null"] }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     VocabularyPage:
@@ -283,6 +418,9 @@ components:
     Unauthorized:
       description: Chưa đăng nhập hoặc token hết hạn
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: Tài khoản không có quyền quản trị
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     Conflict:
       description: Dữ liệu đã tồn tại
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
@@ -290,6 +428,6 @@ components:
       description: Không tìm thấy tài nguyên thuộc tài khoản hiện tại
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     ServiceError:
-      description: Dịch vụ tạo audio không sẵn sàng, hết hạn mức hoặc phản hồi lỗi
+      description: Gemini hoặc ElevenLabs không sẵn sàng, hết hạn mức hoặc phản hồi lỗi
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
 

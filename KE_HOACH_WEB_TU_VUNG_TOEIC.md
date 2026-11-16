@@ -31,6 +31,8 @@ MVP không xác minh email, không quên mật khẩu, không đăng nhập mạ
 - Audio không bắt buộc; hỗ trợ MP3, M4A, WAV, OGG và WebM, tối đa 5 MB.
 - Nghe thử file trước khi lưu; nghe/phát dừng trong danh sách sau khi lưu.
 - Thay hoặc xóa audio độc lập khi sửa từ.
+- Tạo câu ví dụ tiếng Anh trong ngữ cảnh TOEIC và bản dịch tiếng Việt bằng Gemini.
+- Tạo audio đọc câu tiếng Anh, nghỉ 1,5 giây rồi đọc nghĩa tiếng Việt bằng ElevenLabs.
 - Backend kiểm tra MIME, dung lượng và magic bytes để ngăn file giả định dạng.
 - Khi thay/xóa từ, file audio cũ được dọn khỏi storage.
 
@@ -88,6 +90,7 @@ web toeic/
 - `id`, `user_id`.
 - `english_word`, `normalized_word`, `vietnamese_meaning`.
 - `audio_path`, `audio_name`, `audio_type`, `audio_size` có thể null.
+- `example_english`, `example_vietnamese` và metadata `example_audio_*` có thể null.
 - `created_at`, `updated_at`.
 - Index theo người dùng/ngày tạo và người dùng/từ đã chuẩn hóa.
 
@@ -117,6 +120,8 @@ Quan hệ có cascade delete từ `users` tới refresh token và vocabulary.
 - `DELETE /api/vocabularies/:id`
 - `GET /api/vocabularies/:id/audio`
 - `POST /api/ai/audio`: tạo MP3 từ từ tiếng Anh bằng ElevenLabs; yêu cầu đăng nhập.
+- `POST /api/ai/example`: tạo câu ví dụ TOEIC có cấu trúc bằng Gemini.
+- `POST /api/ai/example-audio`: tạo audio ví dụ song ngữ có khoảng nghỉ 1,5 giây.
 
 Chi tiết request, response và lỗi được duy trì tại `toeic-vocabulary-be/docs/openapi.yaml`.
 
