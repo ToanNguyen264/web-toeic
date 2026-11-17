@@ -2,6 +2,7 @@ import { ApiError, apiRequest, fetchProtectedBlob } from "../lib/api";
 import type {
   Vocabulary,
   VocabularyFormValues,
+  MasteryLevel,
   VocabularyPage,
   VocabularyStatus,
 } from "../types/vocabulary";
@@ -82,12 +83,15 @@ export async function deleteVocabulary(_userId: string, vocabulary: Vocabulary) 
   await apiRequest<void>(`/vocabularies/${vocabulary.id}`, { method: "DELETE" });
 }
 
-export async function setVocabularyLearned(vocabularyId: string, isLearned: boolean) {
+export async function setVocabularyMastery(
+  vocabularyId: string,
+  masteryLevel: MasteryLevel,
+) {
   const result = await apiRequest<{ item: Vocabulary }>(
-    `/vocabularies/${vocabularyId}/learned`,
+    `/vocabularies/${vocabularyId}/mastery`,
     {
       method: "PATCH",
-      body: JSON.stringify({ isLearned }),
+      body: JSON.stringify({ masteryLevel }),
     },
   );
   return result.item;

@@ -18,6 +18,7 @@ export type Vocabulary = {
   example_audio_name: string | null;
   example_audio_type: string | null;
   example_audio_size: number | null;
+  mastery_level: MasteryLevel;
   is_learned: boolean;
   created_at: string;
   updated_at: string;
@@ -41,8 +42,11 @@ export type VocabularyPage = {
   pageSize: number;
   stats: {
     unlearned: number;
-    learned: number;
+    learning: number;
+    mastered: number;
   };
 };
 
-export type VocabularyStatus = "all" | "unlearned" | "learned";
+export type MasteryLevel = "unlearned" | "learning" | "mastered";
+
+export type VocabularyStatus = "all" | MasteryLevel;

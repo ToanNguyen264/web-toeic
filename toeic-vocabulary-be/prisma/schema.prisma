@@ -52,6 +52,7 @@ model Vocabulary {
   exampleAudioName  String?  @map("example_audio_name") @db.VarChar(255)
   exampleAudioType  String?  @map("example_audio_type") @db.VarChar(100)
   exampleAudioSize  BigInt?  @map("example_audio_size") @db.UnsignedBigInt
+  masteryLevel      String   @default("unlearned") @map("mastery_level") @db.VarChar(20)
   isLearned         Boolean  @default(false) @map("is_learned")
   createdAt         DateTime @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt         DateTime @updatedAt @map("updated_at") @db.DateTime(3)
@@ -59,6 +60,7 @@ model Vocabulary {
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, normalizedWord])
+  @@index([userId, masteryLevel, createdAt(sort: Desc)])
   @@index([userId, isLearned, createdAt(sort: Desc)])
   @@map("vocabularies")
 }

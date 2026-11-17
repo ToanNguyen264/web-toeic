@@ -7,6 +7,7 @@ import {
   ListMusic,
   RefreshCw,
   Search,
+  Sparkles,
   Star,
   Square,
   X,
@@ -30,10 +31,11 @@ import {
   getWordMeaningAudioUrl,
   hasDuplicateVocabulary,
   listAllVocabularies,
-  setVocabularyLearned,
+  setVocabularyMastery,
   updateVocabulary,
 } from "../services/vocabulary.service";
 import type {
+  MasteryLevel,
   Vocabulary,
   VocabularyFormValues,
   VocabularyStatus,
@@ -64,6 +66,18 @@ type PlaylistProgress = {
 };
 
 type PlaybackRate = 0.5 | 0.75 | 1 | 1.5;
+
+const NEXT_MASTERY_LEVEL: Record<MasteryLevel, MasteryLevel> = {
+  unlearned: "learning",
+  learning: "mastered",
+  mastered: "unlearned",
+};
+
+const MASTERY_LABELS: Record<MasteryLevel, string> = {
+  unlearned: "Chưa thuộc",
+  learning: "Thuộc sơ sơ",
+  mastered: "Thuộc kĩ",
+};
 
 export default function VocabularyPage() {
   const { user } = useAuth();
@@ -444,9 +458,12 @@ export default function VocabularyPage() {
     },
   });
 
-  const learnedMutation = useMutation({
+  const masteryMutation = useMutation({
     mutationFn: async (vocabulary: Vocabulary) =>
-      setVocabularyLearned(vocabulary.id, !vocabulary.is_learned),
+      setVocabularyMastery(
+        vocabulary.id,
+        NEXT_MASTERY_LEVEL[vocabulary.mastery_level],
+      ),
   });
 
   function changeStatus(nextStatus: VocabularyStatus) {
@@ -456,18 +473,16 @@ export default function VocabularyPage() {
     setPage(1);
   }
 
-  async function handleToggleLearned(vocabulary: Vocabulary) {
+  async function handleCycleMastery(vocabulary: Vocabulary) {
     stopPlaylist(false);
     try {
-      const updated = await learnedMutation.mutateAsync(vocabulary);
+      const updated = await masteryMutation.mutateAsync(vocabulary);
       if ((data?.items.length ?? 0) === 1 && page > 1) {
         setPage((current) => current - 1);
       }
       await queryClient.invalidateQueries({ queryKey: ["vocabularies", user?.id] });
       showToast(
-        updated.is_learned
-          ? `Đã chuyển “${updated.english_word}” sang danh sách đã thuộc.`
-          : `Đã chuyển “${updated.english_word}” về danh sách chưa thuộc.`,
+        `Đã chuyển “${updated.english_word}” sang mức ${MASTERY_LABELS[updated.mastery_level].toLowerCase()}.`,
         "success",
       );
     } catch (error) {
@@ -542,7 +557,7 @@ export default function VocabularyPage() {
         </div>
       </section>
 
-      <section className="mb-6 grid gap-4 sm:grid-cols-3">
+      <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <button
           type="button"
           onClick={() => changeStatus("all")}
@@ -561,7 +576,9 @@ export default function VocabularyPage() {
             <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
               {vocabularyQuery.isLoading
                 ? "—"
-                : (data?.stats.unlearned ?? 0) + (data?.stats.learned ?? 0)}
+                : (data?.stats.unlearned ?? 0) +
+                  (data?.stats.learning ?? 0) +
+                  (data?.stats.mastered ?? 0)}
             </p>
           </div>
         </button>
@@ -589,21 +606,42 @@ export default function VocabularyPage() {
 
         <button
           type="button"
-          onClick={() => changeStatus("learned")}
+          onClick={() => changeStatus("learning")}
           className={`flex items-center gap-4 rounded-2xl border p-4 text-left shadow-sm backdrop-blur transition ${
-            status === "learned"
+            status === "learning"
+              ? "border-violet-300 bg-violet-50 ring-4 ring-violet-500/10 dark:border-violet-800 dark:bg-violet-950/40"
+              : "border-white bg-white/90 hover:border-violet-200 hover:bg-violet-50/50 dark:border-slate-800 dark:bg-slate-900/90 dark:hover:border-violet-900"
+          }`}
+          aria-pressed={status === "learning"}
+        >
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-violet-100 text-violet-600 dark:bg-violet-950 dark:text-violet-300">
+            <Sparkles className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-xs font-semibold text-slate-500">Thuộc sơ sơ</p>
+            <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
+              {vocabularyQuery.isLoading ? "—" : data?.stats.learning ?? 0}
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => changeStatus("mastered")}
+          className={`flex items-center gap-4 rounded-2xl border p-4 text-left shadow-sm backdrop-blur transition ${
+            status === "mastered"
               ? "border-amber-300 bg-amber-50 ring-4 ring-amber-500/10 dark:border-amber-800 dark:bg-amber-950/40"
               : "border-white bg-white/90 hover:border-amber-200 hover:bg-amber-50/50 dark:border-slate-800 dark:bg-slate-900/90 dark:hover:border-amber-900"
           }`}
-          aria-pressed={status === "learned"}
+          aria-pressed={status === "mastered"}
         >
           <span className="grid h-11 w-11 place-items-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-300">
             <Star className="h-5 w-5 fill-current" />
           </span>
           <div>
-            <p className="text-xs font-semibold text-slate-500">Đã thuộc</p>
+            <p className="text-xs font-semibold text-slate-500">Thuộc kĩ</p>
             <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
-              {vocabularyQuery.isLoading ? "—" : data?.stats.learned ?? 0}
+              {vocabularyQuery.isLoading ? "—" : data?.stats.mastered ?? 0}
             </p>
           </div>
         </button>
@@ -781,9 +819,9 @@ export default function VocabularyPage() {
               onActivateAudio={handleManualAudioActivation}
               onEdit={openEdit}
               onDelete={setPendingDelete}
-              onToggleLearned={(vocabulary) => void handleToggleLearned(vocabulary)}
-              learnedUpdatingId={
-                learnedMutation.isPending ? learnedMutation.variables?.id ?? null : null
+              onCycleMastery={(vocabulary) => void handleCycleMastery(vocabulary)}
+              masteryUpdatingId={
+                masteryMutation.isPending ? masteryMutation.variables?.id ?? null : null
               }
               onAdd={openCreate}
             />

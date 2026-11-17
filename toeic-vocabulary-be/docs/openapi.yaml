@@ -125,7 +125,7 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: search, in: query, schema: { type: string, maxLength: 150 } }
-        - { name: status, in: query, schema: { type: string, enum: [all, unlearned, learned], default: all } }
+        - { name: status, in: query, schema: { type: string, enum: [all, unlearned, learning, mastered], default: all } }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses:
@@ -166,6 +166,29 @@ paths:
                 isLearned: { type: boolean }
       responses:
         "200": { $ref: "#/components/responses/VocabularySuccess" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /vocabularies/{id}/mastery:
+    patch:
+      tags: [Vocabularies]
+      summary: Cập nhật mức độ ghi nhớ của từ vựng
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/VocabularyId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [masteryLevel]
+              properties:
+                masteryLevel:
+                  type: string
+                  enum: [unlearned, learning, mastered]
+      responses:
+        "200": { $ref: "#/components/responses/VocabularySuccess" }
+        "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
   /vocabularies/check-duplicate:
@@ -383,7 +406,7 @@ components:
         exampleAudio: { type: string, format: binary, description: "Audio ví dụ song ngữ, tối đa 5 MB." }
     Vocabulary:
       type: object
-      required: [id, user_id, english_word, normalized_word, vietnamese_meaning, is_learned, created_at, updated_at]
+      required: [id, user_id, english_word, normalized_word, vietnamese_meaning, mastery_level, is_learned, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
@@ -400,6 +423,7 @@ components:
         example_audio_name: { type: [string, "null"] }
         example_audio_type: { type: [string, "null"] }
         example_audio_size: { type: [integer, "null"] }
+        mastery_level: { type: string, enum: [unlearned, learning, mastered] }
         is_learned: { type: boolean }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -413,10 +437,11 @@ components:
         pageSize: { type: integer, minimum: 1 }
         stats:
           type: object
-          required: [unlearned, learned]
+          required: [unlearned, learning, mastered]
           properties:
             unlearned: { type: integer, minimum: 0 }
-            learned: { type: integer, minimum: 0 }
+            learning: { type: integer, minimum: 0 }
+            mastered: { type: integer, minimum: 0 }
     Error:
       type: object
       required: [message]

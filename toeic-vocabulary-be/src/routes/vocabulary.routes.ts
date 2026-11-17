@@ -12,6 +12,7 @@ import {
   idParamsSchema,
   learnedStatusSchema,
   listQuerySchema,
+  masteryStatusSchema,
   normalizeEnglishWord,
   vocabularyFieldsSchema,
 } from "../utils/validation.js";
@@ -23,7 +24,7 @@ vocabularyRouter.get("/", async (req, res) => {
   const query = listQuerySchema.parse(req.query);
   const where = {
     userId: req.auth!.userId,
-    ...(query.status === "all" ? {} : { isLearned: query.status === "learned" }),
+    ...(query.status === "all" ? {} : { masteryLevel: query.status }),
     ...(query.search
       ? {
           OR: [
@@ -35,7 +36,7 @@ vocabularyRouter.get("/", async (req, res) => {
         }
       : {}),
   };
-  const [items, total, unlearned, learned] = await prisma.$transaction([
+  const [items, total, unlearned, learning, mastered] = await prisma.$transaction([
     prisma.vocabulary.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -44,10 +45,13 @@ vocabularyRouter.get("/", async (req, res) => {
     }),
     prisma.vocabulary.count({ where }),
     prisma.vocabulary.count({
-      where: { userId: req.auth!.userId, isLearned: false },
+      where: { userId: req.auth!.userId, masteryLevel: "unlearned" },
     }),
     prisma.vocabulary.count({
-      where: { userId: req.auth!.userId, isLearned: true },
+      where: { userId: req.auth!.userId, masteryLevel: "learning" },
+    }),
+    prisma.vocabulary.count({
+      where: { userId: req.auth!.userId, masteryLevel: "mastered" },
     }),
   ]);
   res.json({
@@ -55,7 +59,7 @@ vocabularyRouter.get("/", async (req, res) => {
     total,
     page: query.page,
     pageSize: query.pageSize,
-    stats: { unlearned, learned },
+    stats: { unlearned, learning, mastered },
   });
 });
 
@@ -85,7 +89,31 @@ vocabularyRouter.patch("/:id/learned", async (req, res) => {
 
   const vocabulary = await prisma.vocabulary.update({
     where: { id },
-    data: { isLearned },
+    data: {
+      isLearned,
+      masteryLevel: isLearned ? "mastered" : "unlearned",
+    },
+  });
+  res.json({ item: vocabularyDto(vocabulary) });
+});
+
+vocabularyRouter.patch("/:id/mastery", async (req, res) => {
+  const { id } = idParamsSchema.parse(req.params);
+  const { masteryLevel } = masteryStatusSchema.parse(req.body);
+  const current = await prisma.vocabulary.findFirst({
+    where: { id, userId: req.auth!.userId },
+    select: { id: true },
+  });
+  if (!current) {
+    throw new AppError(404, "Không tìm thấy từ vựng.", "VOCABULARY_NOT_FOUND");
+  }
+
+  const vocabulary = await prisma.vocabulary.update({
+    where: { id },
+    data: {
+      masteryLevel,
+      isLearned: masteryLevel === "mastered",
+    },
   });
   res.json({ item: vocabularyDto(vocabulary) });
 });

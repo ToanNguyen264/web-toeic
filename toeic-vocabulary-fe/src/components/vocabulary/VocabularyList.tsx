@@ -8,7 +8,11 @@ import {
   Trash2,
   Volume2,
 } from "lucide-react";
-import type { Vocabulary, VocabularyStatus } from "../../types/vocabulary";
+import type {
+  MasteryLevel,
+  Vocabulary,
+  VocabularyStatus,
+} from "../../types/vocabulary";
 import { AudioButton } from "./AudioButton";
 import { WordMeaningAudioButton } from "./WordMeaningAudioButton";
 
@@ -22,10 +26,32 @@ type VocabularyListProps = {
   onActivateAudio: (id: string | null) => void;
   onEdit: (vocabulary: Vocabulary) => void;
   onDelete: (vocabulary: Vocabulary) => void;
-  onToggleLearned: (vocabulary: Vocabulary) => void;
-  learnedUpdatingId: string | null;
+  onCycleMastery: (vocabulary: Vocabulary) => void;
+  masteryUpdatingId: string | null;
   onAdd: () => void;
 };
+
+const MASTERY_LABELS: Record<MasteryLevel, string> = {
+  unlearned: "Chưa thuộc",
+  learning: "Thuộc sơ sơ",
+  mastered: "Thuộc kĩ",
+};
+
+const NEXT_MASTERY_LABELS: Record<MasteryLevel, string> = {
+  unlearned: "Chuyển sang thuộc sơ sơ",
+  learning: "Chuyển sang thuộc kĩ",
+  mastered: "Chuyển về chưa thuộc",
+};
+
+function masteryButtonClass(level: MasteryLevel) {
+  if (level === "mastered") {
+    return "bg-amber-100 text-amber-500 dark:bg-amber-950 dark:text-amber-300";
+  }
+  if (level === "learning") {
+    return "bg-violet-100 text-violet-600 dark:bg-violet-950 dark:text-violet-300";
+  }
+  return "bg-slate-100 text-slate-400 hover:bg-violet-50 hover:text-violet-500 dark:bg-slate-800 dark:hover:bg-violet-950";
+}
 
 function VocabularySkeleton() {
   return (
@@ -56,8 +82,8 @@ export function VocabularyList({
   onActivateAudio,
   onEdit,
   onDelete,
-  onToggleLearned,
-  learnedUpdatingId,
+  onCycleMastery,
+  masteryUpdatingId,
   onAdd,
 }: VocabularyListProps) {
   if (loading) return <VocabularySkeleton />;
@@ -71,8 +97,10 @@ export function VocabularyList({
         <h3 className="mt-5 text-lg font-extrabold text-slate-900 dark:text-white">
           {search
             ? "Không tìm thấy từ phù hợp"
-            : status === "learned"
-              ? "Chưa có từ đã thuộc"
+            : status === "mastered"
+              ? "Chưa có từ thuộc kĩ"
+              : status === "learning"
+                ? "Chưa có từ thuộc sơ sơ"
               : status === "unlearned"
                 ? "Danh sách chưa thuộc đang trống"
                 : "Kho từ vựng đang trống"}
@@ -80,11 +108,13 @@ export function VocabularyList({
         <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
           {search
             ? "Thử một từ khóa khác hoặc xóa bộ lọc tìm kiếm."
-            : status === "learned"
-              ? "Bấm biểu tượng ngôi sao ở danh sách chưa thuộc để chuyển từ sang đây."
+            : status === "mastered"
+              ? "Bấm nút trạng thái của từ để chuyển sang mức thuộc kĩ."
+              : status === "learning"
+                ? "Bấm nút trạng thái của từ để chuyển sang mức thuộc sơ sơ."
               : "Thêm từ đầu tiên cùng file phát âm để bắt đầu luyện nghe."}
         </p>
-        {!search && status !== "learned" && (
+        {!search && status === "all" && (
           <button
             type="button"
             onClick={onAdd}
@@ -117,25 +147,23 @@ export function VocabularyList({
                   <div className="flex items-start gap-3">
                     <button
                       type="button"
-                      onClick={() => onToggleLearned(item)}
-                      disabled={learnedUpdatingId === item.id}
-                      className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg transition disabled:cursor-wait disabled:opacity-60 ${
-                        item.is_learned
-                          ? "bg-amber-100 text-amber-500 dark:bg-amber-950 dark:text-amber-300"
-                          : "bg-slate-100 text-slate-400 hover:bg-amber-50 hover:text-amber-500 dark:bg-slate-800 dark:hover:bg-amber-950"
-                      }`}
-                      aria-label={
-                        item.is_learned
-                          ? `Đánh dấu ${item.english_word} là chưa thuộc`
-                          : `Đánh dấu ${item.english_word} là đã thuộc`
-                      }
-                      title={item.is_learned ? "Chuyển về chưa thuộc" : "Đánh dấu đã thuộc"}
+                      onClick={() => onCycleMastery(item)}
+                      disabled={masteryUpdatingId === item.id}
+                      className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg transition disabled:cursor-wait disabled:opacity-60 ${masteryButtonClass(item.mastery_level)}`}
+                      aria-label={`${item.english_word}: ${MASTERY_LABELS[item.mastery_level]}. ${NEXT_MASTERY_LABELS[item.mastery_level]}`}
+                      title={`${MASTERY_LABELS[item.mastery_level]} · ${NEXT_MASTERY_LABELS[item.mastery_level]}`}
                     >
-                      {learnedUpdatingId === item.id ? (
+                      {masteryUpdatingId === item.id ? (
                         <LoaderCircle className="h-4 w-4 animate-spin" />
                       ) : (
                         <Star
-                          className={`h-4 w-4 ${item.is_learned ? "fill-current" : ""}`}
+                          className={`h-4 w-4 ${
+                            item.mastery_level === "mastered"
+                              ? "fill-current"
+                              : item.mastery_level === "learning"
+                                ? "fill-current opacity-50"
+                                : ""
+                          }`}
                         />
                       )}
                     </button>
@@ -237,23 +265,24 @@ export function VocabularyList({
               <div className="flex min-w-0 items-start gap-3">
                 <button
                   type="button"
-                  onClick={() => onToggleLearned(item)}
-                  disabled={learnedUpdatingId === item.id}
-                  className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl transition disabled:cursor-wait disabled:opacity-60 ${
-                    item.is_learned
-                      ? "bg-amber-100 text-amber-500 dark:bg-amber-950 dark:text-amber-300"
-                      : "bg-slate-100 text-slate-400 dark:bg-slate-800"
-                  }`}
-                  aria-label={
-                    item.is_learned
-                      ? `Đánh dấu ${item.english_word} là chưa thuộc`
-                      : `Đánh dấu ${item.english_word} là đã thuộc`
-                  }
+                  onClick={() => onCycleMastery(item)}
+                  disabled={masteryUpdatingId === item.id}
+                  className={`mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl transition disabled:cursor-wait disabled:opacity-60 ${masteryButtonClass(item.mastery_level)}`}
+                  aria-label={`${item.english_word}: ${MASTERY_LABELS[item.mastery_level]}. ${NEXT_MASTERY_LABELS[item.mastery_level]}`}
+                  title={`${MASTERY_LABELS[item.mastery_level]} · ${NEXT_MASTERY_LABELS[item.mastery_level]}`}
                 >
-                  {learnedUpdatingId === item.id ? (
+                  {masteryUpdatingId === item.id ? (
                     <LoaderCircle className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Star className={`h-4 w-4 ${item.is_learned ? "fill-current" : ""}`} />
+                    <Star
+                      className={`h-4 w-4 ${
+                        item.mastery_level === "mastered"
+                          ? "fill-current"
+                          : item.mastery_level === "learning"
+                            ? "fill-current opacity-50"
+                            : ""
+                      }`}
+                    />
                   )}
                 </button>
                 <div className="min-w-0">
