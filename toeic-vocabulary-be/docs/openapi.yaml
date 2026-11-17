@@ -118,6 +118,59 @@ paths:
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/elevenlabs-keys:
+    get:
+      tags: [Admin]
+      summary: Liệt kê và kiểm tra kho ElevenLabs API key
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Danh sách key đã che kín cùng workspace và quota }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Admin]
+      summary: Kiểm tra và thêm ElevenLabs API key
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [label, apiKey]
+              properties:
+                label: { type: string, minLength: 1, maxLength: 80 }
+                apiKey: { type: string, minLength: 10, maxLength: 500, format: password }
+      responses:
+        "201": { description: Danh sách key sau khi thêm }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/ServiceError" }
+  /admin/elevenlabs-keys/{id}:
+    patch:
+      tags: [Admin]
+      summary: Đổi tên hoặc bật tắt ElevenLabs API key
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Danh sách key sau khi cập nhật }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Admin]
+      summary: Xóa ElevenLabs API key khỏi kho
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Đã xóa key }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /vocabularies:
     get:
       tags: [Vocabularies]

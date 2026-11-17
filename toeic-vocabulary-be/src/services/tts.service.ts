@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { env } from "../config/env.js";
 import { AppError } from "../errors/AppError.js";
-import { AI_SETTING_KEYS, getProviderApiKey } from "./app-settings.service.js";
+import { getElevenLabsApiKeys } from "./app-settings.service.js";
 
 const MAX_GENERATED_AUDIO_BYTES = 5 * 1024 * 1024;
 
@@ -17,12 +17,9 @@ export type ElevenLabsConfig = {
   languageCode?: "en" | "vi";
 };
 
-async function environmentConfig(): Promise<ElevenLabsConfig> {
+function englishConfig(apiKey: string): ElevenLabsConfig {
   return {
-    apiKey: await getProviderApiKey(
-      AI_SETTING_KEYS.elevenlabs,
-      env.ELEVENLABS_API_KEY,
-    ),
+    apiKey,
     voiceId: env.ELEVENLABS_VOICE_ID,
     modelId: env.ELEVENLABS_MODEL_ID,
     apiBaseUrl: env.ELEVENLABS_API_BASE_URL,
@@ -46,7 +43,8 @@ export async function generateSpeech(
   text: string,
   config?: ElevenLabsConfig,
 ): Promise<Buffer> {
-  const resolvedConfig = config ?? (await environmentConfig());
+  if (!config) return generateSpeechFromKeyPool(text, "en");
+  const resolvedConfig = config;
   if (!resolvedConfig.apiKey || !resolvedConfig.voiceId) {
     throw new AppError(
       503,
@@ -144,6 +142,38 @@ export async function generateSpeech(
   return audio;
 }
 
+let preferredElevenLabsKeyId: string | null = null;
+
+async function generateSpeechFromKeyPool(text: string, language: "en" | "vi") {
+  const keys = await getElevenLabsApiKeys();
+  if (!keys.length) {
+    throw new AppError(503, "Tính năng tạo audio AI chưa được cấu hình.", "TTS_NOT_CONFIGURED");
+  }
+  const orderedKeys = [...keys].sort((a, b) => {
+    if (a.id === preferredElevenLabsKeyId) return -1;
+    if (b.id === preferredElevenLabsKeyId) return 1;
+    return 0;
+  });
+  let lastError: unknown;
+  for (const key of orderedKeys) {
+    try {
+      const audio = await generateSpeech(
+        text,
+        language === "en" ? englishConfig(key.apiKey) : vietnameseEnvironmentConfig(key.apiKey),
+      );
+      preferredElevenLabsKeyId = key.id;
+      return audio;
+    } catch (error) {
+      lastError = error;
+      const canRotate =
+        error instanceof AppError &&
+        (error.code === "TTS_PROVIDER_AUTH_ERROR" || error.code === "TTS_QUOTA_EXCEEDED");
+      if (!canRotate) throw error;
+    }
+  }
+  throw lastError;
+}
+
 async function combineAudioWithPause(
   englishAudio: Buffer,
   vietnameseAudio: Buffer,
@@ -231,9 +261,7 @@ export async function generateBilingualSpeech(
   english: string,
   vietnamese: string,
 ): Promise<Buffer> {
-  const englishConfig = await environmentConfig();
-  const vietnameseConfig = vietnameseEnvironmentConfig(englishConfig.apiKey);
-  if (!vietnameseConfig.voiceId) {
+  if (!env.ELEVENLABS_VI_VOICE_ID) {
     throw new AppError(
       503,
       "Giọng đọc tiếng Việt chưa được cấu hình.",
@@ -242,8 +270,8 @@ export async function generateBilingualSpeech(
   }
 
   const [englishAudio, vietnameseAudio] = await Promise.all([
-    generateSpeech(english, englishConfig),
-    generateSpeech(vietnamese, vietnameseConfig),
+    generateSpeechFromKeyPool(english, "en"),
+    generateSpeechFromKeyPool(vietnamese, "vi"),
   ]);
   return combineAudioWithPause(englishAudio, vietnameseAudio);
 }
@@ -259,12 +287,11 @@ function wait(milliseconds: number) {
 
 async function generateSpeechWithQuotaRetry(
   segment: ListeningLessonSegment,
-  config: ElevenLabsConfig,
 ) {
   const retryDelays = [2_500, 5_000];
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await generateSpeech(segment.text, config);
+      return await generateSpeechFromKeyPool(segment.text, segment.language);
     } catch (error) {
       const canRetry =
         error instanceof AppError &&
@@ -357,9 +384,7 @@ async function combineLessonAudio(audioSegments: Buffer[]): Promise<Buffer> {
 export async function generateListeningLesson(
   segments: ListeningLessonSegment[],
 ): Promise<Buffer> {
-  const englishConfig = await environmentConfig();
-  const vietnameseConfig = vietnameseEnvironmentConfig(englishConfig.apiKey);
-  if (!vietnameseConfig.voiceId) {
+  if (!env.ELEVENLABS_VI_VOICE_ID) {
     throw new AppError(
       503,
       "Giọng đọc tiếng Việt chưa được cấu hình.",
@@ -380,10 +405,7 @@ export async function generateListeningLesson(
   for (const [index, segment] of mergedSegments.entries()) {
     if (index > 0) await wait(750);
     audioSegments.push(
-      await generateSpeechWithQuotaRetry(
-        segment,
-        segment.language === "en" ? englishConfig : vietnameseConfig,
-      ),
+      await generateSpeechWithQuotaRetry(segment),
     );
   }
   return combineLessonAudio(audioSegments);
