@@ -22,15 +22,6 @@ const generatedExampleSchema = z.object({
   annotatedEnglish: z.string().trim().min(1).max(1000),
   vietnamese: z.string().trim().min(1).max(1000),
   listeningGuide: z.string().trim().min(1).max(3000),
-  lessonSegments: z
-    .array(
-      z.object({
-        language: z.enum(["en", "vi"]),
-        text: z.string().trim().min(1).max(1000),
-      }),
-    )
-    .min(4)
-    .max(10),
   topic: z.enum(TOEIC_TOPICS),
 });
 
@@ -80,7 +71,6 @@ export async function generateToeicExample(
     "Create annotatedEnglish by copying the same English sentence and inserting a short Vietnamese meaning in parentheses after 2 to 4 CEFR A2-or-harder words or phrases. Always annotate the requested vocabulary with its supplied meaning. Do not annotate easy A1 function words.",
     "Create a natural full Vietnamese translation.",
     "Create listeningGuide in Vietnamese. Explain only real linking, sound reduction, weak forms, elision, and sentence stress that a learner can hear in this exact sentence. If a feature is absent, do not invent it.",
-    "Create 4 to 10 lessonSegments for audio: first the full English sentence, then Vietnamese teaching, short English chunks to demonstrate important sounds, Vietnamese guidance, and finally the exact full English sentence again. Use language en for English speech and vi for Vietnamese teaching. Keep the lesson concise.",
     "Return structured JSON only; do not use markdown.",
   ].join("\n");
 
@@ -121,20 +111,6 @@ export async function generateToeicExample(
                 type: "string",
                 description: "A concise Vietnamese explanation of real connected speech, reductions and stress in the sentence.",
               },
-              lessonSegments: {
-                type: "array",
-                minItems: 4,
-                maxItems: 10,
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    language: { type: "string", enum: ["en", "vi"] },
-                    text: { type: "string" },
-                  },
-                  required: ["language", "text"],
-                },
-              },
               topic: { type: "string", enum: TOEIC_TOPICS },
             },
             required: [
@@ -142,7 +118,6 @@ export async function generateToeicExample(
               "annotatedEnglish",
               "vietnamese",
               "listeningGuide",
-              "lessonSegments",
               "topic",
             ],
           },
@@ -209,16 +184,6 @@ export async function generateToeicExample(
     throw new AppError(
       502,
       "Câu ví dụ không chứa đúng từ vựng được yêu cầu.",
-      "GEMINI_INVALID_RESPONSE",
-    );
-  }
-  if (
-    result.lessonSegments[0]?.language !== "en" ||
-    result.lessonSegments.at(-1)?.language !== "en"
-  ) {
-    throw new AppError(
-      502,
-      "Bài giảng nghe từ Gemini không đúng cấu trúc.",
       "GEMINI_INVALID_RESPONSE",
     );
   }

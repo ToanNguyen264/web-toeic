@@ -25,7 +25,7 @@ const generateExampleAudioSchema = z.object({
       }),
     )
     .min(4)
-    .max(10),
+    .max(14),
 }).refine(
   (value) => value.segments.reduce((total, segment) => total + segment.text.length, 0) <= 4000,
   { message: "Nội dung bài giảng quá dài.", path: ["segments"] },

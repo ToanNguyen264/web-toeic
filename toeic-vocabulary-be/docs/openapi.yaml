@@ -310,22 +310,12 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [english, annotatedEnglish, vietnamese, listeningGuide, lessonSegments, topic]
+                required: [english, annotatedEnglish, vietnamese, listeningGuide, topic]
                 properties:
                   english: { type: string, maxLength: 500 }
                   annotatedEnglish: { type: string, maxLength: 1000 }
                   vietnamese: { type: string, maxLength: 1000 }
                   listeningGuide: { type: string, maxLength: 3000 }
-                  lessonSegments:
-                    type: array
-                    minItems: 4
-                    maxItems: 10
-                    items:
-                      type: object
-                      required: [language, text]
-                      properties:
-                        language: { type: string, enum: [en, vi] }
-                        text: { type: string, maxLength: 1000 }
                   topic: { type: string }
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -350,7 +340,7 @@ paths:
                 segments:
                   type: array
                   minItems: 4
-                  maxItems: 10
+                  maxItems: 14
                   items:
                     type: object
                     required: [language, text]

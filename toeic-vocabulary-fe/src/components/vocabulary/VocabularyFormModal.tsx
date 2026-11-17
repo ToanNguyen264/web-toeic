@@ -53,6 +53,43 @@ type VocabularyFormModalProps = {
   onClose: () => void;
 };
 
+function hasSpeakableText(value: string) {
+  return /[\p{L}\p{N}]/u.test(value);
+}
+
+function buildListeningLessonSegments(
+  english: string,
+  annotatedEnglish: string,
+  listeningGuide: string,
+): ListeningLessonSegment[] {
+  const segments: ListeningLessonSegment[] = [
+    { language: "en", text: english },
+    { language: "vi", text: listeningGuide },
+  ];
+  const annotationPattern = /\(([^()]+)\)/g;
+  let cursor = 0;
+  let annotation: RegExpExecArray | null;
+
+  while ((annotation = annotationPattern.exec(annotatedEnglish)) !== null) {
+    const englishPart = cleanText(annotatedEnglish.slice(cursor, annotation.index));
+    if (hasSpeakableText(englishPart)) {
+      segments.push({ language: "en", text: englishPart });
+    }
+    const vietnameseMeaning = cleanText(annotation[1]);
+    if (hasSpeakableText(vietnameseMeaning)) {
+      segments.push({ language: "vi", text: `nghĩa là ${vietnameseMeaning}` });
+    }
+    cursor = annotation.index + annotation[0].length;
+  }
+
+  const finalEnglishPart = cleanText(annotatedEnglish.slice(cursor));
+  if (hasSpeakableText(finalEnglishPart)) {
+    segments.push({ language: "en", text: finalEnglishPart });
+  }
+  segments.push({ language: "en", text: english });
+  return segments;
+}
+
 export function VocabularyFormModal({
   vocabulary,
   loading,
@@ -77,7 +114,6 @@ export function VocabularyFormModal({
   const [exampleListeningGuide, setExampleListeningGuide] = useState(
     vocabulary?.example_listening_guide ?? "",
   );
-  const [lessonSegments, setLessonSegments] = useState<ListeningLessonSegment[]>([]);
   const [exampleAudioFile, setExampleAudioFile] = useState<File | null>(null);
   const [examplePreviewUrl, setExamplePreviewUrl] = useState<string | null>(null);
   const [removeCurrentExampleAudio, setRemoveCurrentExampleAudio] = useState(false);
@@ -141,25 +177,21 @@ export function VocabularyFormModal({
   function handleExampleEnglishChange(value: string) {
     if (value !== exampleEnglish) invalidateExampleAudio();
     setExampleEnglish(value);
-    setLessonSegments([]);
   }
 
   function handleAnnotatedEnglishChange(value: string) {
     if (value !== exampleAnnotatedEnglish) invalidateExampleAudio();
     setExampleAnnotatedEnglish(value);
-    setLessonSegments([]);
   }
 
   function handleExampleVietnameseChange(value: string) {
     if (value !== exampleVietnamese) invalidateExampleAudio();
     setExampleVietnamese(value);
-    setLessonSegments([]);
   }
 
   function handleListeningGuideChange(value: string) {
     if (value !== exampleListeningGuide) invalidateExampleAudio();
     setExampleListeningGuide(value);
-    setLessonSegments([]);
   }
 
   async function handleGenerateAudio() {
@@ -225,7 +257,6 @@ export function VocabularyFormModal({
       setExampleAnnotatedEnglish(example.annotatedEnglish);
       setExampleVietnamese(example.vietnamese);
       setExampleListeningGuide(example.listeningGuide);
-      setLessonSegments(example.lessonSegments);
     } catch (error) {
       setErrors((current) => ({
         ...current,
@@ -241,14 +272,18 @@ export function VocabularyFormModal({
 
   async function handleGenerateExampleAudio() {
     const english = cleanText(exampleEnglish);
-    if (!english || lessonSegments.length < 4) {
+    const annotatedEnglish = cleanText(exampleAnnotatedEnglish);
+    const listeningGuide = cleanText(exampleListeningGuide);
+    if (!english || !annotatedEnglish || !listeningGuide) {
       setErrors((current) => ({
         ...current,
         exampleEnglish: english ? undefined : "Vui lòng nhập câu ví dụ tiếng Anh.",
-        exampleAudio:
-          lessonSegments.length >= 4
-            ? undefined
-            : "Hãy bấm Tạo bằng Gemini để chuẩn bị nội dung bài giảng trước.",
+        exampleAnnotatedEnglish: annotatedEnglish
+          ? undefined
+          : "Vui lòng tạo câu tiếng Anh có chú thích từ khó.",
+        exampleListeningGuide: listeningGuide
+          ? undefined
+          : "Vui lòng tạo phần giáo viên hướng dẫn nghe.",
       }));
       return;
     }
@@ -256,7 +291,9 @@ export function VocabularyFormModal({
     setGeneratingExampleAudio(true);
     setErrors((current) => ({ ...current, exampleAudio: undefined }));
     try {
-      const blob = await generateToeicExampleAudio(lessonSegments);
+      const blob = await generateToeicExampleAudio(
+        buildListeningLessonSegments(english, annotatedEnglish, listeningGuide),
+      );
       const safeName =
         cleanText(englishWord)
           .toLowerCase()
