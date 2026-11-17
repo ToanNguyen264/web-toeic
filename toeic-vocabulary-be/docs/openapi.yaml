@@ -290,7 +290,7 @@ paths:
   /ai/example:
     post:
       tags: [AI Content]
-      summary: Tạo câu ví dụ TOEIC và bản dịch bằng Gemini
+      summary: Tạo câu TOEIC, chú thích từ khó và kịch bản hướng dẫn nghe bằng Gemini
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -310,10 +310,22 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [english, vietnamese, topic]
+                required: [english, annotatedEnglish, vietnamese, listeningGuide, lessonSegments, topic]
                 properties:
                   english: { type: string, maxLength: 500 }
+                  annotatedEnglish: { type: string, maxLength: 1000 }
                   vietnamese: { type: string, maxLength: 1000 }
+                  listeningGuide: { type: string, maxLength: 3000 }
+                  lessonSegments:
+                    type: array
+                    minItems: 4
+                    maxItems: 10
+                    items:
+                      type: object
+                      required: [language, text]
+                      properties:
+                        language: { type: string, enum: [en, vi] }
+                        text: { type: string, maxLength: 1000 }
                   topic: { type: string }
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -324,7 +336,7 @@ paths:
   /ai/example-audio:
     post:
       tags: [AI Content]
-      summary: Tạo MP3 song ngữ với khoảng nghỉ 1 giây bằng ElevenLabs
+      summary: Tạo MP3 bài giảng nghe Anh-Việt bằng ElevenLabs
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -333,10 +345,18 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [english, vietnamese]
+              required: [segments]
               properties:
-                english: { type: string, minLength: 1, maxLength: 500 }
-                vietnamese: { type: string, minLength: 1, maxLength: 1000 }
+                segments:
+                  type: array
+                  minItems: 4
+                  maxItems: 10
+                  items:
+                    type: object
+                    required: [language, text]
+                    properties:
+                      language: { type: string, enum: [en, vi] }
+                      text: { type: string, minLength: 1, maxLength: 1000 }
       responses:
         "200":
           description: Audio MP3 song ngữ
@@ -400,7 +420,9 @@ components:
         vietnameseMeaning: { type: string, minLength: 1, maxLength: 1000 }
         removeCurrentAudio: { type: boolean, default: false }
         exampleEnglish: { type: string, maxLength: 500 }
+        exampleAnnotatedEnglish: { type: string, maxLength: 1000 }
         exampleVietnamese: { type: string, maxLength: 1000 }
+        exampleListeningGuide: { type: string, maxLength: 3000 }
         removeCurrentExampleAudio: { type: boolean, default: false }
         audio: { type: string, format: binary, description: "MP3/M4A/WAV/OGG/WebM, tối đa 5 MB." }
         exampleAudio: { type: string, format: binary, description: "Audio ví dụ song ngữ, tối đa 5 MB." }
@@ -418,7 +440,9 @@ components:
         audio_type: { type: [string, "null"] }
         audio_size: { type: [integer, "null"] }
         example_english: { type: [string, "null"] }
+        example_annotated_english: { type: [string, "null"] }
         example_vietnamese: { type: [string, "null"] }
+        example_listening_guide: { type: [string, "null"] }
         example_audio_path: { type: [string, "null"] }
         example_audio_name: { type: [string, "null"] }
         example_audio_type: { type: [string, "null"] }

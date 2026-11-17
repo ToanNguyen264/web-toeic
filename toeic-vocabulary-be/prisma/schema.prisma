@@ -47,7 +47,9 @@ model Vocabulary {
   wordMeaningAudioType String?  @map("word_meaning_audio_type") @db.VarChar(100)
   wordMeaningAudioSize BigInt?  @map("word_meaning_audio_size") @db.UnsignedBigInt
   exampleEnglish    String?  @map("example_english") @db.VarChar(500)
+  exampleAnnotatedEnglish String? @map("example_annotated_english") @db.VarChar(1000)
   exampleVietnamese String?  @map("example_vietnamese") @db.VarChar(1000)
+  exampleListeningGuide String? @map("example_listening_guide") @db.Text
   exampleAudioPath  String?  @map("example_audio_path") @db.VarChar(500)
   exampleAudioName  String?  @map("example_audio_name") @db.VarChar(255)
   exampleAudioType  String?  @map("example_audio_type") @db.VarChar(100)

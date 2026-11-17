@@ -3,8 +3,16 @@ import { apiRequest } from "../lib/api";
 
 export type GeneratedToeicExample = {
   english: string;
+  annotatedEnglish: string;
   vietnamese: string;
+  listeningGuide: string;
+  lessonSegments: ListeningLessonSegment[];
   topic: string;
+};
+
+export type ListeningLessonSegment = {
+  language: "en" | "vi";
+  text: string;
 };
 
 export function generateVocabularyAudio(text: string) {
@@ -21,9 +29,9 @@ export function generateToeicExample(word: string, meaning: string) {
   });
 }
 
-export function generateToeicExampleAudio(english: string, vietnamese: string) {
+export function generateToeicExampleAudio(segments: ListeningLessonSegment[]) {
   return fetchProtectedBlob("/ai/example-audio", {
     method: "POST",
-    body: JSON.stringify({ english, vietnamese }),
+    body: JSON.stringify({ segments }),
   });
 }

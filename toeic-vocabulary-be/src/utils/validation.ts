@@ -17,7 +17,17 @@ export const vocabularyFieldsSchema = z
       .transform(cleanText)
       .pipe(z.string().min(1).max(1000)),
     exampleEnglish: z.string().default("").transform(cleanText).pipe(z.string().max(500)),
+    exampleAnnotatedEnglish: z
+      .string()
+      .default("")
+      .transform(cleanText)
+      .pipe(z.string().max(1000)),
     exampleVietnamese: z.string().default("").transform(cleanText).pipe(z.string().max(1000)),
+    exampleListeningGuide: z
+      .string()
+      .default("")
+      .transform(cleanText)
+      .pipe(z.string().max(3000)),
     removeCurrentAudio: booleanFormField,
     removeCurrentExampleAudio: booleanFormField,
   })

@@ -143,7 +143,9 @@ vocabularyRouter.post("/", uploadAudio, async (req, res) => {
         audioType: audioFile?.mimetype ?? null,
         audioSize: audioFile?.size ?? null,
         exampleEnglish: fields.exampleEnglish || null,
+        exampleAnnotatedEnglish: fields.exampleAnnotatedEnglish || null,
         exampleVietnamese: fields.exampleVietnamese || null,
+        exampleListeningGuide: fields.exampleListeningGuide || null,
         exampleAudioPath: savedExampleAudio?.relativePath ?? null,
         exampleAudioName: exampleAudioFile?.originalname ?? null,
         exampleAudioType: exampleAudioFile?.mimetype ?? null,
@@ -179,7 +181,9 @@ vocabularyRouter.put("/:id", uploadAudio, async (req, res) => {
       fields.vietnameseMeaning !== current.vietnameseMeaning;
     const exampleChanged =
       fields.exampleEnglish !== (current.exampleEnglish ?? "") ||
-      fields.exampleVietnamese !== (current.exampleVietnamese ?? "");
+      fields.exampleAnnotatedEnglish !== (current.exampleAnnotatedEnglish ?? "") ||
+      fields.exampleVietnamese !== (current.exampleVietnamese ?? "") ||
+      fields.exampleListeningGuide !== (current.exampleListeningGuide ?? "");
     const clearExampleAudio =
       !savedExampleAudio &&
       (fields.removeCurrentExampleAudio || !fields.exampleEnglish || exampleChanged);
@@ -190,7 +194,9 @@ vocabularyRouter.put("/:id", uploadAudio, async (req, res) => {
         normalizedWord: normalizeEnglishWord(fields.englishWord),
         vietnameseMeaning: fields.vietnameseMeaning,
         exampleEnglish: fields.exampleEnglish || null,
+        exampleAnnotatedEnglish: fields.exampleAnnotatedEnglish || null,
         exampleVietnamese: fields.exampleVietnamese || null,
+        exampleListeningGuide: fields.exampleListeningGuide || null,
         ...(wordMeaningChanged
           ? {
               wordMeaningAudioPath: null,

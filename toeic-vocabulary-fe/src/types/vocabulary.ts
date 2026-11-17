@@ -13,7 +13,9 @@ export type Vocabulary = {
   word_meaning_audio_type: string | null;
   word_meaning_audio_size: number | null;
   example_english: string | null;
+  example_annotated_english: string | null;
   example_vietnamese: string | null;
+  example_listening_guide: string | null;
   example_audio_path: string | null;
   example_audio_name: string | null;
   example_audio_type: string | null;
@@ -30,7 +32,9 @@ export type VocabularyFormValues = {
   audioFile: File | null;
   removeCurrentAudio: boolean;
   exampleEnglish: string;
+  exampleAnnotatedEnglish: string;
   exampleVietnamese: string;
+  exampleListeningGuide: string;
   exampleAudioFile: File | null;
   removeCurrentExampleAudio: boolean;
 };

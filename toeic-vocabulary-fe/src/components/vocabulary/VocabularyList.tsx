@@ -186,11 +186,17 @@ export function VocabularyList({
                   {item.example_english ? (
                     <div className="space-y-2">
                       <p className="text-sm font-semibold leading-6 text-slate-800 dark:text-slate-100">
-                        {item.example_english}
+                        {item.example_annotated_english || item.example_english}
                       </p>
                       <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
                         {item.example_vietnamese}
                       </p>
+                      {item.example_listening_guide && (
+                        <p className="rounded-xl bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200">
+                          <span className="font-bold">Hướng dẫn nghe: </span>
+                          {item.example_listening_guide}
+                        </p>
+                      )}
                       <AudioButton
                         id={item.id}
                         kind="example"
@@ -302,11 +308,17 @@ export function VocabularyList({
                   <BookOpenText className="mt-0.5 h-4 w-4 shrink-0 text-violet-500" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold leading-6 text-slate-800 dark:text-slate-100">
-                      {item.example_english}
+                      {item.example_annotated_english || item.example_english}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
                       {item.example_vietnamese}
                     </p>
+                    {item.example_listening_guide && (
+                      <p className="mt-2 rounded-xl bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200">
+                        <span className="font-bold">Hướng dẫn nghe: </span>
+                        {item.example_listening_guide}
+                      </p>
+                    )}
                     <div className="mt-2">
                       <AudioButton
                         id={item.id}

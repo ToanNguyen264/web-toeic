@@ -247,3 +247,93 @@ export async function generateBilingualSpeech(
   ]);
   return combineAudioWithPause(englishAudio, vietnameseAudio);
 }
+
+export type ListeningLessonSegment = {
+  language: "en" | "vi";
+  text: string;
+};
+
+async function combineLessonAudio(audioSegments: Buffer[]): Promise<Buffer> {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "toeic-listening-lesson-"));
+  const paths = audioSegments.map((_, index) => join(workingDirectory, `${index}.mp3`));
+  const outputPath = join(workingDirectory, "lesson.mp3");
+  try {
+    await Promise.all(audioSegments.map((audio, index) => writeFile(paths[index], audio)));
+    await new Promise<void>((resolve, reject) => {
+      const filters = audioSegments
+        .map(
+          (_, index) =>
+            `[${index}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[a${index}]`,
+        )
+        .join(";");
+      const inputs = audioSegments.map((_, index) => `[a${index}]`).join("");
+      const process = spawn(
+        "ffmpeg",
+        [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          ...paths.flatMap((path) => ["-i", path]),
+          "-filter_complex",
+          `${filters};${inputs}concat=n=${audioSegments.length}:v=0:a=1[out]`,
+          "-map",
+          "[out]",
+          "-codec:a",
+          "libmp3lame",
+          "-b:a",
+          "128k",
+          outputPath,
+        ],
+        { stdio: ["ignore", "ignore", "pipe"] },
+      );
+      let errorOutput = "";
+      process.stderr.on("data", (chunk: Buffer) => {
+        if (errorOutput.length < 4_000) errorOutput += chunk.toString();
+      });
+      const timeout = setTimeout(() => process.kill("SIGKILL"), 60_000);
+      process.on("error", (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      process.on("close", (code) => {
+        clearTimeout(timeout);
+        if (code === 0) resolve();
+        else reject(new Error(errorOutput || `ffmpeg exited with code ${code}`));
+      });
+    });
+    const combinedAudio = await readFile(outputPath);
+    if (combinedAudio.length === 0 || combinedAudio.length > MAX_GENERATED_AUDIO_BYTES) {
+      throw new Error("Listening lesson has an invalid size");
+    }
+    return combinedAudio;
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError(500, "Không thể ghép audio bài giảng.", "TTS_AUDIO_COMBINE_ERROR");
+  } finally {
+    await rm(workingDirectory, { recursive: true, force: true });
+  }
+}
+
+export async function generateListeningLesson(
+  segments: ListeningLessonSegment[],
+): Promise<Buffer> {
+  const englishConfig = await environmentConfig();
+  const vietnameseConfig = vietnameseEnvironmentConfig(englishConfig.apiKey);
+  if (!vietnameseConfig.voiceId) {
+    throw new AppError(
+      503,
+      "Giọng đọc tiếng Việt chưa được cấu hình.",
+      "TTS_VIETNAMESE_NOT_CONFIGURED",
+    );
+  }
+  const audioSegments = await Promise.all(
+    segments.map((segment) =>
+      generateSpeech(
+        segment.text,
+        segment.language === "en" ? englishConfig : vietnameseConfig,
+      ),
+    ),
+  );
+  return combineLessonAudio(audioSegments);
+}
