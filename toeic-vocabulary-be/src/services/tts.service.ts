@@ -253,6 +253,29 @@ export type ListeningLessonSegment = {
   text: string;
 };
 
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function generateSpeechWithQuotaRetry(
+  segment: ListeningLessonSegment,
+  config: ElevenLabsConfig,
+) {
+  const retryDelays = [2_500, 5_000];
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await generateSpeech(segment.text, config);
+    } catch (error) {
+      const canRetry =
+        error instanceof AppError &&
+        error.code === "TTS_QUOTA_EXCEEDED" &&
+        attempt < retryDelays.length;
+      if (!canRetry) throw error;
+      await wait(retryDelays[attempt]);
+    }
+  }
+}
+
 async function combineLessonAudio(audioSegments: Buffer[]): Promise<Buffer> {
   const workingDirectory = await mkdtemp(join(tmpdir(), "toeic-listening-lesson-"));
   const paths = audioSegments.map((_, index) => join(workingDirectory, `${index}.mp3`));
@@ -327,13 +350,25 @@ export async function generateListeningLesson(
       "TTS_VIETNAMESE_NOT_CONFIGURED",
     );
   }
-  const audioSegments = await Promise.all(
-    segments.map((segment) =>
-      generateSpeech(
-        segment.text,
+  const mergedSegments = segments.reduce<ListeningLessonSegment[]>((result, segment) => {
+    const previous = result.at(-1);
+    if (previous?.language === segment.language) {
+      previous.text = `${previous.text} ${segment.text}`;
+    } else {
+      result.push({ ...segment });
+    }
+    return result;
+  }, []);
+
+  const audioSegments: Buffer[] = [];
+  for (const [index, segment] of mergedSegments.entries()) {
+    if (index > 0) await wait(750);
+    audioSegments.push(
+      await generateSpeechWithQuotaRetry(
+        segment,
         segment.language === "en" ? englishConfig : vietnameseConfig,
       ),
-    ),
-  );
+    );
+  }
   return combineLessonAudio(audioSegments);
 }
