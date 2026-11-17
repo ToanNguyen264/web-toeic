@@ -24,7 +24,7 @@ export function AudioButton({
   externallyPlaying = false,
 }: AudioButtonProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -36,13 +36,16 @@ export function AudioButton({
     }
   }, [isActive]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    return () => {
       audioRef.current?.pause();
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-    },
-    [audioUrl],
-  );
+      audioRef.current?.removeAttribute("src");
+      audioRef.current?.load();
+      audioRef.current = null;
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    };
+  }, [id, kind, path]);
 
   if (!path) {
     return (
@@ -68,10 +71,10 @@ export function AudioButton({
       }
 
       setLoading(true);
-      let url = audioUrl;
+      let url = audioUrlRef.current;
       if (!url) {
         url = await getAudioUrl(id, kind);
-        setAudioUrl(url);
+        audioUrlRef.current = url;
       }
 
       const activationId = kind === "example" ? `${id}:example` : id;
@@ -103,7 +106,7 @@ export function AudioButton({
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <div className="flex min-w-0 items-center">
       <button
         type="button"
         onClick={toggleAudio}
@@ -130,11 +133,6 @@ export function AudioButton({
         {!compact &&
           (playing || externallyPlaying ? "Dừng" : failed ? "Thử lại" : "Nghe")}
       </button>
-      {!compact && name && (
-        <span className="max-w-32 truncate text-xs text-slate-500" title={name}>
-          {name}
-        </span>
-      )}
     </div>
   );
 }

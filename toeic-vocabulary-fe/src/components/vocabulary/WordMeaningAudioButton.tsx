@@ -19,7 +19,7 @@ export function WordMeaningAudioButton({
 }: WordMeaningAudioButtonProps) {
   const activationId = `${id}:meaning`;
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -32,13 +32,16 @@ export function WordMeaningAudioButton({
     }
   }, [isActive]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    return () => {
       audioRef.current?.pause();
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
-    },
-    [audioUrl],
-  );
+      audioRef.current?.removeAttribute("src");
+      audioRef.current?.load();
+      audioRef.current = null;
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    };
+  }, [id, path]);
 
   async function toggleAudio() {
     try {
@@ -51,10 +54,10 @@ export function WordMeaningAudioButton({
       }
 
       setLoading(true);
-      let url = audioUrl;
+      let url = audioUrlRef.current;
       if (!url) {
         url = await getWordMeaningAudioUrl(id, !stored);
-        setAudioUrl(url);
+        audioUrlRef.current = url;
         setStored(true);
       }
 

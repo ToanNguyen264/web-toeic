@@ -7,7 +7,6 @@ import {
   ListMusic,
   RefreshCw,
   Search,
-  Sparkles,
   Star,
   Square,
   X,
@@ -524,21 +523,9 @@ export default function VocabularyPage() {
   return (
     <AppShell>
       <section className="mb-7 overflow-hidden rounded-[28px] bg-gradient-to-r from-indigo-700 via-violet-700 to-cyan-700 p-6 text-white shadow-xl shadow-indigo-900/15 sm:p-8">
-        <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(300px,420px)] lg:items-center">
+        <div className="relative grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(240px,320px)] lg:items-stretch">
           <div className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full border border-white/10 bg-white/10 blur-2xl" />
-          <div className="relative max-w-2xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-cyan-200" />
-              Kho từ vựng cá nhân
-            </div>
-            <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
-              Lưu hôm nay, nghe lại bất cứ lúc nào.
-            </h1>
-            <p className="mt-2 text-sm leading-6 text-indigo-100 sm:text-base">
-              Quản lý từ tiếng Anh, nghĩa tiếng Việt và phát âm trong cùng một nơi.
-            </p>
-          </div>
-          <div className="relative flex flex-col gap-3">
+          <div className="relative">
             <NowPlayingPanel
               playing={playlistPlaying}
               preparing={playlistPreparing}
@@ -548,6 +535,8 @@ export default function VocabularyPage() {
               total={playlistProgress?.total}
               continuous={playlistMode === "word-meaning"}
             />
+          </div>
+          <div className="relative flex items-center">
             <AddVocabularyButton onClick={openCreate} />
           </div>
         </div>

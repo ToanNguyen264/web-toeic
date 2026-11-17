@@ -9,7 +9,6 @@ import {
   Volume2,
 } from "lucide-react";
 import type { Vocabulary, VocabularyStatus } from "../../types/vocabulary";
-import { formatFileSize } from "../../utils/validation";
 import { AudioButton } from "./AudioButton";
 import { WordMeaningAudioButton } from "./WordMeaningAudioButton";
 
@@ -202,11 +201,6 @@ export function VocabularyList({
                       onActivate={onActivateAudio}
                     />
                   </div>
-                  {item.audio_size ? (
-                    <p className="mt-1.5 text-[11px] text-slate-400">
-                      {formatFileSize(item.audio_size)}
-                    </p>
-                  ) : null}
                 </td>
                 <td className="px-6 py-5 align-top">
                   <div className="flex justify-end gap-1">
