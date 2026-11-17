@@ -57,6 +57,10 @@ function hasSpeakableText(value: string) {
   return /[\p{L}\p{N}]/u.test(value);
 }
 
+function removeVietnameseAnnotations(value: string) {
+  return cleanText(value.replace(/\([^()]+\)/g, " "));
+}
+
 function buildListeningLessonSegments(
   english: string,
   annotatedEnglish: string,
@@ -271,8 +275,9 @@ export function VocabularyFormModal({
   }
 
   async function handleGenerateExampleAudio() {
-    const english = cleanText(exampleEnglish);
     const annotatedEnglish = cleanText(exampleAnnotatedEnglish);
+    const english =
+      cleanText(exampleEnglish) || removeVietnameseAnnotations(annotatedEnglish);
     const listeningGuide = cleanText(exampleListeningGuide);
     if (!english || !annotatedEnglish || !listeningGuide) {
       setErrors((current) => ({
@@ -291,6 +296,7 @@ export function VocabularyFormModal({
     setGeneratingExampleAudio(true);
     setErrors((current) => ({ ...current, exampleAudio: undefined }));
     try {
+      if (!cleanText(exampleEnglish)) setExampleEnglish(english);
       const blob = await generateToeicExampleAudio(
         buildListeningLessonSegments(english, annotatedEnglish, listeningGuide),
       );
@@ -560,7 +566,11 @@ export function VocabularyFormModal({
                 className="w-full border-cyan-200 text-cyan-700 dark:border-cyan-900 dark:text-cyan-300"
                 onClick={handleGenerateExampleAudio}
                 loading={generatingExampleAudio}
-                disabled={busy || !cleanText(exampleEnglish)}
+                disabled={
+                  busy ||
+                  !cleanText(exampleAnnotatedEnglish) ||
+                  !cleanText(exampleListeningGuide)
+                }
               >
                 {!generatingExampleAudio && <Languages className="h-4 w-4" />}
                 {exampleAudioFile ? "Tạo lại audio bài giảng" : "Tạo audio có giáo viên hướng dẫn"}
