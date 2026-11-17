@@ -5,7 +5,6 @@ export type GeneratedToeicExample = {
   english: string;
   annotatedEnglish: string;
   vietnamese: string;
-  listeningGuide: string;
   topic: string;
 };
 

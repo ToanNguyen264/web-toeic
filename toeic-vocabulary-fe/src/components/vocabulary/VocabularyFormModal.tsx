@@ -42,7 +42,6 @@ type FormErrors = {
   exampleEnglish?: string;
   exampleAnnotatedEnglish?: string;
   exampleVietnamese?: string;
-  exampleListeningGuide?: string;
   exampleAudio?: string;
 };
 
@@ -64,12 +63,8 @@ function removeVietnameseAnnotations(value: string) {
 function buildListeningLessonSegments(
   english: string,
   annotatedEnglish: string,
-  listeningGuide: string,
 ): ListeningLessonSegment[] {
-  const segments: ListeningLessonSegment[] = [
-    { language: "en", text: english },
-    { language: "vi", text: listeningGuide },
-  ];
+  const segments: ListeningLessonSegment[] = [{ language: "en", text: english }];
   const annotationPattern = /\(([^()]+)\)/g;
   let cursor = 0;
   let annotation: RegExpExecArray | null;
@@ -114,9 +109,6 @@ export function VocabularyFormModal({
   );
   const [exampleVietnamese, setExampleVietnamese] = useState(
     vocabulary?.example_vietnamese ?? "",
-  );
-  const [exampleListeningGuide, setExampleListeningGuide] = useState(
-    vocabulary?.example_listening_guide ?? "",
   );
   const [exampleAudioFile, setExampleAudioFile] = useState<File | null>(null);
   const [examplePreviewUrl, setExamplePreviewUrl] = useState<string | null>(null);
@@ -193,11 +185,6 @@ export function VocabularyFormModal({
     setExampleVietnamese(value);
   }
 
-  function handleListeningGuideChange(value: string) {
-    if (value !== exampleListeningGuide) invalidateExampleAudio();
-    setExampleListeningGuide(value);
-  }
-
   async function handleGenerateAudio() {
     const text = cleanText(englishWord);
     if (!text) {
@@ -252,7 +239,6 @@ export function VocabularyFormModal({
       exampleEnglish: undefined,
       exampleAnnotatedEnglish: undefined,
       exampleVietnamese: undefined,
-      exampleListeningGuide: undefined,
     }));
     try {
       const example = await generateToeicExample(word, meaning);
@@ -260,7 +246,6 @@ export function VocabularyFormModal({
       setExampleEnglish(example.english);
       setExampleAnnotatedEnglish(example.annotatedEnglish);
       setExampleVietnamese(example.vietnamese);
-      setExampleListeningGuide(example.listeningGuide);
     } catch (error) {
       setErrors((current) => ({
         ...current,
@@ -278,17 +263,13 @@ export function VocabularyFormModal({
     const annotatedEnglish = cleanText(exampleAnnotatedEnglish);
     const english =
       cleanText(exampleEnglish) || removeVietnameseAnnotations(annotatedEnglish);
-    const listeningGuide = cleanText(exampleListeningGuide);
-    if (!english || !annotatedEnglish || !listeningGuide) {
+    if (!english || !annotatedEnglish) {
       setErrors((current) => ({
         ...current,
         exampleEnglish: english ? undefined : "Vui lòng nhập câu ví dụ tiếng Anh.",
         exampleAnnotatedEnglish: annotatedEnglish
           ? undefined
           : "Vui lòng tạo câu tiếng Anh có chú thích từ khó.",
-        exampleListeningGuide: listeningGuide
-          ? undefined
-          : "Vui lòng tạo phần giáo viên hướng dẫn nghe.",
       }));
       return;
     }
@@ -298,7 +279,7 @@ export function VocabularyFormModal({
     try {
       if (!cleanText(exampleEnglish)) setExampleEnglish(english);
       const blob = await generateToeicExampleAudio(
-        buildListeningLessonSegments(english, annotatedEnglish, listeningGuide),
+        buildListeningLessonSegments(english, annotatedEnglish),
       );
       const safeName =
         cleanText(englishWord)
@@ -328,7 +309,6 @@ export function VocabularyFormModal({
       exampleEnglish,
       exampleAnnotatedEnglish,
       exampleVietnamese,
-      exampleListeningGuide,
     );
     const audioError = validateAudioFile(audioFile);
     const exampleAudioError = validateAudioFile(exampleAudioFile);
@@ -348,7 +328,6 @@ export function VocabularyFormModal({
       exampleEnglish: cleanText(exampleEnglish),
       exampleAnnotatedEnglish: cleanText(exampleAnnotatedEnglish),
       exampleVietnamese: cleanText(exampleVietnamese),
-      exampleListeningGuide: cleanText(exampleListeningGuide),
       exampleAudioFile,
       removeCurrentExampleAudio,
     });
@@ -430,7 +409,7 @@ export function VocabularyFormModal({
                     Ví dụ theo chủ đề TOEIC
                   </h3>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    Chú thích từ khó và tạo phần giảng nối âm bằng tiếng Việt.
+                    Chèn nghĩa Việt sau mọi từ/cụm từ từ A2 trở lên hoặc dễ gây khó.
                   </p>
                 </div>
               </div>
@@ -532,48 +511,16 @@ export function VocabularyFormModal({
                 )}
               </div>
 
-              <div>
-                <label
-                  htmlFor="example-listening-guide"
-                  className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200"
-                >
-                  Giáo viên hướng dẫn nghe
-                </label>
-                <textarea
-                  id="example-listening-guide"
-                  rows={4}
-                  maxLength={3000}
-                  value={exampleListeningGuide}
-                  onChange={(event) => handleListeningGuideChange(event.target.value)}
-                  placeholder="Gemini sẽ giải thích nối âm, âm yếu, nuốt âm và trọng âm thực sự có trong câu."
-                  aria-invalid={Boolean(errors.exampleListeningGuide)}
-                  className={`w-full resize-none rounded-xl border bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 dark:bg-slate-900 dark:text-white ${
-                    errors.exampleListeningGuide
-                      ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/10"
-                      : "border-cyan-100 focus:border-cyan-500 focus:ring-cyan-500/10 dark:border-cyan-900"
-                  }`}
-                />
-                {errors.exampleListeningGuide && (
-                  <p className="mt-1.5 text-xs font-medium text-rose-600">
-                    {errors.exampleListeningGuide}
-                  </p>
-                )}
-              </div>
-
               <Button
                 type="button"
                 variant="secondary"
                 className="w-full border-cyan-200 text-cyan-700 dark:border-cyan-900 dark:text-cyan-300"
                 onClick={handleGenerateExampleAudio}
                 loading={generatingExampleAudio}
-                disabled={
-                  busy ||
-                  !cleanText(exampleAnnotatedEnglish) ||
-                  !cleanText(exampleListeningGuide)
-                }
+                disabled={busy || !cleanText(exampleAnnotatedEnglish)}
               >
                 {!generatingExampleAudio && <Languages className="h-4 w-4" />}
-                {exampleAudioFile ? "Tạo lại audio bài giảng" : "Tạo audio có giáo viên hướng dẫn"}
+                {exampleAudioFile ? "Tạo lại audio câu chú thích" : "Tạo audio câu chú thích"}
               </Button>
 
               {exampleAudioFile && examplePreviewUrl && (

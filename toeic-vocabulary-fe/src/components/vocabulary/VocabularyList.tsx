@@ -191,12 +191,6 @@ export function VocabularyList({
                       <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">
                         {item.example_vietnamese}
                       </p>
-                      {item.example_listening_guide && (
-                        <p className="rounded-xl bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200">
-                          <span className="font-bold">Hướng dẫn nghe: </span>
-                          {item.example_listening_guide}
-                        </p>
-                      )}
                       <AudioButton
                         id={item.id}
                         kind="example"
@@ -313,12 +307,6 @@ export function VocabularyList({
                     <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
                       {item.example_vietnamese}
                     </p>
-                    {item.example_listening_guide && (
-                      <p className="mt-2 rounded-xl bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200">
-                        <span className="font-bold">Hướng dẫn nghe: </span>
-                        {item.example_listening_guide}
-                      </p>
-                    )}
                     <div className="mt-2">
                       <AudioButton
                         id={item.id}

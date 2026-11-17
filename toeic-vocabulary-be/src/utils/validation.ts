@@ -23,11 +23,6 @@ export const vocabularyFieldsSchema = z
       .transform(cleanText)
       .pipe(z.string().max(1000)),
     exampleVietnamese: z.string().default("").transform(cleanText).pipe(z.string().max(1000)),
-    exampleListeningGuide: z
-      .string()
-      .default("")
-      .transform(cleanText)
-      .pipe(z.string().max(3000)),
     removeCurrentAudio: booleanFormField,
     removeCurrentExampleAudio: booleanFormField,
   })

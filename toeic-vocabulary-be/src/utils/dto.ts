@@ -30,7 +30,6 @@ export function vocabularyDto(vocabulary: Vocabulary) {
     example_english: vocabulary.exampleEnglish,
     example_annotated_english: vocabulary.exampleAnnotatedEnglish,
     example_vietnamese: vocabulary.exampleVietnamese,
-    example_listening_guide: vocabulary.exampleListeningGuide,
     example_audio_path: vocabulary.exampleAudioPath,
     example_audio_name: vocabulary.exampleAudioName,
     example_audio_type: vocabulary.exampleAudioType,

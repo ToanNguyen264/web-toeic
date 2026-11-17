@@ -290,7 +290,7 @@ paths:
   /ai/example:
     post:
       tags: [AI Content]
-      summary: Tạo câu TOEIC, chú thích từ khó và kịch bản hướng dẫn nghe bằng Gemini
+      summary: Tạo câu TOEIC, chú thích từ khó và bản dịch bằng Gemini
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -310,12 +310,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [english, annotatedEnglish, vietnamese, listeningGuide, topic]
+                required: [english, annotatedEnglish, vietnamese, topic]
                 properties:
                   english: { type: string, maxLength: 500 }
                   annotatedEnglish: { type: string, maxLength: 1000 }
                   vietnamese: { type: string, maxLength: 1000 }
-                  listeningGuide: { type: string, maxLength: 3000 }
                   topic: { type: string }
         "400": { $ref: "#/components/responses/ValidationError" }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -340,7 +339,7 @@ paths:
                 segments:
                   type: array
                   minItems: 4
-                  maxItems: 14
+                  maxItems: 24
                   items:
                     type: object
                     required: [language, text]
@@ -412,7 +411,6 @@ components:
         exampleEnglish: { type: string, maxLength: 500 }
         exampleAnnotatedEnglish: { type: string, maxLength: 1000 }
         exampleVietnamese: { type: string, maxLength: 1000 }
-        exampleListeningGuide: { type: string, maxLength: 3000 }
         removeCurrentExampleAudio: { type: boolean, default: false }
         audio: { type: string, format: binary, description: "MP3/M4A/WAV/OGG/WebM, tối đa 5 MB." }
         exampleAudio: { type: string, format: binary, description: "Audio ví dụ song ngữ, tối đa 5 MB." }
@@ -432,7 +430,6 @@ components:
         example_english: { type: [string, "null"] }
         example_annotated_english: { type: [string, "null"] }
         example_vietnamese: { type: [string, "null"] }
-        example_listening_guide: { type: [string, "null"] }
         example_audio_path: { type: [string, "null"] }
         example_audio_name: { type: [string, "null"] }
         example_audio_type: { type: [string, "null"] }

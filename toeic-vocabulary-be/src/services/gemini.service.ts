@@ -21,7 +21,6 @@ const generatedExampleSchema = z.object({
   english: z.string().trim().min(1).max(500),
   annotatedEnglish: z.string().trim().min(1).max(1000),
   vietnamese: z.string().trim().min(1).max(1000),
-  listeningGuide: z.string().trim().min(1).max(3000),
   topic: z.enum(TOEIC_TOPICS),
 });
 
@@ -68,9 +67,8 @@ export async function generateToeicExample(
     `The supplied Vietnamese meaning is: ${JSON.stringify(meaning)}.`,
     "Use only a realistic TOEIC context such as office work, meetings, HR, business travel, transportation, hotels, restaurants, purchasing, finance, customer service, marketing, sales, or shipping.",
     "The clean English sentence must contain 8 to 22 words.",
-    "Create annotatedEnglish by copying the same English sentence and inserting a short Vietnamese meaning in parentheses after 2 to 4 CEFR A2-or-harder words or phrases. Always annotate the requested vocabulary with its supplied meaning. Do not annotate easy A1 function words.",
+    "Create annotatedEnglish by copying the same English sentence and inserting a short, context-appropriate Vietnamese meaning in parentheses after every CEFR A2-or-harder word, phrasal verb, business term, idiom, or phrase that may be difficult for a Vietnamese learner. Do a second pass so no genuinely difficult content word or phrase is omitted. Always annotate the requested vocabulary with its supplied meaning. Do not annotate easy A1 function words, repeated words, names, or numbers. Prefer one annotation for a whole phrase instead of annotating each word separately.",
     "Create a natural full Vietnamese translation.",
-    "Create listeningGuide in Vietnamese. Explain only real linking, sound reduction, weak forms, elision, and sentence stress that a learner can hear in this exact sentence. If a feature is absent, do not invent it.",
     "Return structured JSON only; do not use markdown.",
   ].join("\n");
 
@@ -101,15 +99,11 @@ export async function generateToeicExample(
               },
               annotatedEnglish: {
                 type: "string",
-                description: "The same English sentence with Vietnamese glosses after 2 to 4 A2-or-harder words or phrases.",
+                description: "The same English sentence with concise Vietnamese glosses after all A2-or-harder or contextually difficult words and phrases.",
               },
               vietnamese: {
                 type: "string",
                 description: "A natural Vietnamese translation of the English sentence.",
-              },
-              listeningGuide: {
-                type: "string",
-                description: "A concise Vietnamese explanation of real connected speech, reductions and stress in the sentence.",
               },
               topic: { type: "string", enum: TOEIC_TOPICS },
             },
@@ -117,7 +111,6 @@ export async function generateToeicExample(
               "english",
               "annotatedEnglish",
               "vietnamese",
-              "listeningGuide",
               "topic",
             ],
           },

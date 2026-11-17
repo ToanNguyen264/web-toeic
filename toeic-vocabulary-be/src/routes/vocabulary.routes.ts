@@ -145,7 +145,6 @@ vocabularyRouter.post("/", uploadAudio, async (req, res) => {
         exampleEnglish: fields.exampleEnglish || null,
         exampleAnnotatedEnglish: fields.exampleAnnotatedEnglish || null,
         exampleVietnamese: fields.exampleVietnamese || null,
-        exampleListeningGuide: fields.exampleListeningGuide || null,
         exampleAudioPath: savedExampleAudio?.relativePath ?? null,
         exampleAudioName: exampleAudioFile?.originalname ?? null,
         exampleAudioType: exampleAudioFile?.mimetype ?? null,
@@ -182,8 +181,7 @@ vocabularyRouter.put("/:id", uploadAudio, async (req, res) => {
     const exampleChanged =
       fields.exampleEnglish !== (current.exampleEnglish ?? "") ||
       fields.exampleAnnotatedEnglish !== (current.exampleAnnotatedEnglish ?? "") ||
-      fields.exampleVietnamese !== (current.exampleVietnamese ?? "") ||
-      fields.exampleListeningGuide !== (current.exampleListeningGuide ?? "");
+      fields.exampleVietnamese !== (current.exampleVietnamese ?? "");
     const clearExampleAudio =
       !savedExampleAudio &&
       (fields.removeCurrentExampleAudio || !fields.exampleEnglish || exampleChanged);
@@ -196,7 +194,6 @@ vocabularyRouter.put("/:id", uploadAudio, async (req, res) => {
         exampleEnglish: fields.exampleEnglish || null,
         exampleAnnotatedEnglish: fields.exampleAnnotatedEnglish || null,
         exampleVietnamese: fields.exampleVietnamese || null,
-        exampleListeningGuide: fields.exampleListeningGuide || null,
         ...(wordMeaningChanged
           ? {
               wordMeaningAudioPath: null,

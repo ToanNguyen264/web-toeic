@@ -66,7 +66,6 @@ export function validateVocabularyFields(
   exampleEnglish = "",
   exampleAnnotatedEnglish = "",
   exampleVietnamese = "",
-  exampleListeningGuide = "",
 ) {
   const errors: {
     englishWord?: string;
@@ -74,14 +73,12 @@ export function validateVocabularyFields(
     exampleEnglish?: string;
     exampleAnnotatedEnglish?: string;
     exampleVietnamese?: string;
-    exampleListeningGuide?: string;
   } = {};
   const english = cleanText(englishWord);
   const vietnamese = cleanText(vietnameseMeaning);
   const exampleEn = cleanText(exampleEnglish);
   const annotatedEn = cleanText(exampleAnnotatedEnglish);
   const exampleVi = cleanText(exampleVietnamese);
-  const listeningGuide = cleanText(exampleListeningGuide);
 
   if (!english) errors.englishWord = "Vui lòng nhập từ tiếng Anh.";
   else if (english.length > 150)
@@ -99,8 +96,6 @@ export function validateVocabularyFields(
     errors.exampleAnnotatedEnglish = "Câu chú thích không được vượt quá 1.000 ký tự.";
   if (exampleVi.length > 1000)
     errors.exampleVietnamese = "Nghĩa câu ví dụ không được vượt quá 1.000 ký tự.";
-  if (listeningGuide.length > 3000)
-    errors.exampleListeningGuide = "Phần hướng dẫn nghe không được vượt quá 3.000 ký tự.";
   if (Boolean(exampleEn) !== Boolean(exampleVi)) {
     if (!exampleEn) errors.exampleEnglish = "Vui lòng nhập câu ví dụ tiếng Anh.";
     if (!exampleVi) errors.exampleVietnamese = "Vui lòng nhập nghĩa tiếng Việt của câu ví dụ.";

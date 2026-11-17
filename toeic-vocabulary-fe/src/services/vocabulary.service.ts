@@ -23,7 +23,6 @@ function formDataFor(values: VocabularyFormValues) {
   formData.set("exampleEnglish", values.exampleEnglish);
   formData.set("exampleAnnotatedEnglish", values.exampleAnnotatedEnglish);
   formData.set("exampleVietnamese", values.exampleVietnamese);
-  formData.set("exampleListeningGuide", values.exampleListeningGuide);
   formData.set("removeCurrentAudio", String(values.removeCurrentAudio));
   formData.set("removeCurrentExampleAudio", String(values.removeCurrentExampleAudio));
   if (values.audioFile) formData.set("audio", values.audioFile);
