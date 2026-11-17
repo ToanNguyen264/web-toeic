@@ -23,6 +23,7 @@ import {
   generateToeicExampleAudio,
   generateVocabularyAudio,
   type ListeningLessonSegment,
+  type VocabularyAnnotation,
 } from "../../services/tts.service";
 import { toUserMessage } from "../../utils/errors";
 import {
@@ -62,28 +63,16 @@ function removeVietnameseAnnotations(value: string) {
 
 function buildListeningLessonSegments(
   english: string,
-  annotatedEnglish: string,
+  annotations: VocabularyAnnotation[],
 ): ListeningLessonSegment[] {
   const segments: ListeningLessonSegment[] = [{ language: "en", text: english }];
-  const annotationPattern = /\(([^()]+)\)/g;
-  let cursor = 0;
-  let annotation: RegExpExecArray | null;
-
-  while ((annotation = annotationPattern.exec(annotatedEnglish)) !== null) {
-    const englishPart = cleanText(annotatedEnglish.slice(cursor, annotation.index));
-    if (hasSpeakableText(englishPart)) {
-      segments.push({ language: "en", text: englishPart });
-    }
-    const vietnameseMeaning = cleanText(annotation[1]);
-    if (hasSpeakableText(vietnameseMeaning)) {
+  for (const annotation of annotations) {
+    const difficultWord = cleanText(annotation.english);
+    const vietnameseMeaning = cleanText(annotation.vietnamese);
+    if (hasSpeakableText(difficultWord) && hasSpeakableText(vietnameseMeaning)) {
+      segments.push({ language: "en", text: difficultWord });
       segments.push({ language: "vi", text: `nghĩa là ${vietnameseMeaning}` });
     }
-    cursor = annotation.index + annotation[0].length;
-  }
-
-  const finalEnglishPart = cleanText(annotatedEnglish.slice(cursor));
-  if (hasSpeakableText(finalEnglishPart)) {
-    segments.push({ language: "en", text: finalEnglishPart });
   }
   segments.push({ language: "en", text: english });
   return segments;
@@ -107,6 +96,7 @@ export function VocabularyFormModal({
   const [exampleAnnotatedEnglish, setExampleAnnotatedEnglish] = useState(
     vocabulary?.example_annotated_english ?? "",
   );
+  const [annotations, setAnnotations] = useState<VocabularyAnnotation[]>([]);
   const [exampleVietnamese, setExampleVietnamese] = useState(
     vocabulary?.example_vietnamese ?? "",
   );
@@ -173,11 +163,13 @@ export function VocabularyFormModal({
   function handleExampleEnglishChange(value: string) {
     if (value !== exampleEnglish) invalidateExampleAudio();
     setExampleEnglish(value);
+    setAnnotations([]);
   }
 
   function handleAnnotatedEnglishChange(value: string) {
     if (value !== exampleAnnotatedEnglish) invalidateExampleAudio();
     setExampleAnnotatedEnglish(value);
+    setAnnotations([]);
   }
 
   function handleExampleVietnameseChange(value: string) {
@@ -245,6 +237,7 @@ export function VocabularyFormModal({
       invalidateExampleAudio();
       setExampleEnglish(example.english);
       setExampleAnnotatedEnglish(example.annotatedEnglish);
+      setAnnotations(example.annotations);
       setExampleVietnamese(example.vietnamese);
     } catch (error) {
       setErrors((current) => ({
@@ -263,12 +256,14 @@ export function VocabularyFormModal({
     const annotatedEnglish = cleanText(exampleAnnotatedEnglish);
     const english =
       cleanText(exampleEnglish) || removeVietnameseAnnotations(annotatedEnglish);
-    if (!english || !annotatedEnglish) {
+    if (!english || !annotatedEnglish || annotations.length === 0) {
       setErrors((current) => ({
         ...current,
         exampleEnglish: english ? undefined : "Vui lòng nhập câu ví dụ tiếng Anh.",
         exampleAnnotatedEnglish: annotatedEnglish
-          ? undefined
+          ? annotations.length > 0
+            ? undefined
+            : "Hãy bấm Tạo bằng Gemini để xác định riêng từng từ/cụm từ khó."
           : "Vui lòng tạo câu tiếng Anh có chú thích từ khó.",
       }));
       return;
@@ -279,7 +274,7 @@ export function VocabularyFormModal({
     try {
       if (!cleanText(exampleEnglish)) setExampleEnglish(english);
       const blob = await generateToeicExampleAudio(
-        buildListeningLessonSegments(english, annotatedEnglish),
+        buildListeningLessonSegments(english, annotations),
       );
       const safeName =
         cleanText(englishWord)

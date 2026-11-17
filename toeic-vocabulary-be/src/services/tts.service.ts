@@ -283,13 +283,21 @@ async function combineLessonAudio(audioSegments: Buffer[]): Promise<Buffer> {
   try {
     await Promise.all(audioSegments.map((audio, index) => writeFile(paths[index], audio)));
     await new Promise<void>((resolve, reject) => {
-      const filters = audioSegments
+      const pauseCount = Math.max(0, audioSegments.length - 1);
+      const audioFilters = audioSegments
         .map(
           (_, index) =>
             `[${index}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[a${index}]`,
+        );
+      const pauseFilters = Array.from({ length: pauseCount }, (_, index) => {
+        const inputIndex = audioSegments.length + index;
+        return `[${inputIndex}:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[p${index}]`;
+      });
+      const concatInputs = audioSegments
+        .map((_, index) =>
+          index < audioSegments.length - 1 ? `[a${index}][p${index}]` : `[a${index}]`,
         )
-        .join(";");
-      const inputs = audioSegments.map((_, index) => `[a${index}]`).join("");
+        .join("");
       const process = spawn(
         "ffmpeg",
         [
@@ -298,8 +306,16 @@ async function combineLessonAudio(audioSegments: Buffer[]): Promise<Buffer> {
           "error",
           "-y",
           ...paths.flatMap((path) => ["-i", path]),
+          ...Array.from({ length: pauseCount }, () => [
+            "-f",
+            "lavfi",
+            "-t",
+            "0.45",
+            "-i",
+            "anullsrc=channel_layout=stereo:sample_rate=44100",
+          ]).flat(),
           "-filter_complex",
-          `${filters};${inputs}concat=n=${audioSegments.length}:v=0:a=1[out]`,
+          `${[...audioFilters, ...pauseFilters].join(";")};${concatInputs}concat=n=${audioSegments.length * 2 - 1}:v=0:a=1[out]`,
           "-map",
           "[out]",
           "-codec:a",

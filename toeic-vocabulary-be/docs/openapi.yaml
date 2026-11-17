@@ -310,10 +310,20 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [english, annotatedEnglish, vietnamese, topic]
+                required: [english, annotatedEnglish, annotations, vietnamese, topic]
                 properties:
                   english: { type: string, maxLength: 500 }
                   annotatedEnglish: { type: string, maxLength: 1000 }
+                  annotations:
+                    type: array
+                    minItems: 1
+                    maxItems: 10
+                    items:
+                      type: object
+                      required: [english, vietnamese]
+                      properties:
+                        english: { type: string, maxLength: 150 }
+                        vietnamese: { type: string, maxLength: 300 }
                   vietnamese: { type: string, maxLength: 1000 }
                   topic: { type: string }
         "400": { $ref: "#/components/responses/ValidationError" }

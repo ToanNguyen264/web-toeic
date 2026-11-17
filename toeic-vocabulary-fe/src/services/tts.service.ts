@@ -4,8 +4,14 @@ import { apiRequest } from "../lib/api";
 export type GeneratedToeicExample = {
   english: string;
   annotatedEnglish: string;
+  annotations: VocabularyAnnotation[];
   vietnamese: string;
   topic: string;
+};
+
+export type VocabularyAnnotation = {
+  english: string;
+  vietnamese: string;
 };
 
 export type ListeningLessonSegment = {

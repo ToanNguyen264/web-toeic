@@ -20,6 +20,15 @@ const TOEIC_TOPICS = [
 const generatedExampleSchema = z.object({
   english: z.string().trim().min(1).max(500),
   annotatedEnglish: z.string().trim().min(1).max(1000),
+  annotations: z
+    .array(
+      z.object({
+        english: z.string().trim().min(1).max(150),
+        vietnamese: z.string().trim().min(1).max(300),
+      }),
+    )
+    .min(1)
+    .max(10),
   vietnamese: z.string().trim().min(1).max(1000),
   topic: z.enum(TOEIC_TOPICS),
 });
@@ -68,6 +77,7 @@ export async function generateToeicExample(
     "Use only a realistic TOEIC context such as office work, meetings, HR, business travel, transportation, hotels, restaurants, purchasing, finance, customer service, marketing, sales, or shipping.",
     "The clean English sentence must contain 8 to 22 words.",
     "Create annotatedEnglish by copying the same English sentence and inserting a short, context-appropriate Vietnamese meaning in parentheses after every CEFR A2-or-harder word, phrasal verb, business term, idiom, or phrase that may be difficult for a Vietnamese learner. Do a second pass so no genuinely difficult content word or phrase is omitted. Always annotate the requested vocabulary with its supplied meaning. Do not annotate easy A1 function words, repeated words, names, or numbers. Prefer one annotation for a whole phrase instead of annotating each word separately.",
+    "Return annotations as the exact list of English words or phrases annotated in annotatedEnglish and their Vietnamese meanings. Each English value must contain only the isolated difficult word or phrase, never surrounding filler words.",
     "Create a natural full Vietnamese translation.",
     "Return structured JSON only; do not use markdown.",
   ].join("\n");
@@ -101,6 +111,20 @@ export async function generateToeicExample(
                 type: "string",
                 description: "The same English sentence with concise Vietnamese glosses after all A2-or-harder or contextually difficult words and phrases.",
               },
+              annotations: {
+                type: "array",
+                minItems: 1,
+                maxItems: 10,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    english: { type: "string" },
+                    vietnamese: { type: "string" },
+                  },
+                  required: ["english", "vietnamese"],
+                },
+              },
               vietnamese: {
                 type: "string",
                 description: "A natural Vietnamese translation of the English sentence.",
@@ -110,6 +134,7 @@ export async function generateToeicExample(
             required: [
               "english",
               "annotatedEnglish",
+              "annotations",
               "vietnamese",
               "topic",
             ],
