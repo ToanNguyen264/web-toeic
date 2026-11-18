@@ -189,7 +189,7 @@ export default function VocabularyPage() {
     if (runId !== playlistRunRef.current) return;
     const tracks = playlistTracksRef.current;
     if (index >= tracks.length) {
-      if (playlistModeRef.current === "word-meaning" && tracks.length > 0) {
+      if (tracks.length > 0) {
         const failedThisCycle =
           playlistSkippedRef.current - playlistCycleStartSkippedRef.current;
         if (failedThisCycle < tracks.length) {
