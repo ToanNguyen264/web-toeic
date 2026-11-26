@@ -88,22 +88,30 @@ export function FlashcardSummary({
         </div>
       </div>
 
-      <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
-        <Button onClick={onNextPriorityBatch}>
-          <RefreshCw className="h-4 w-4" />
-          Ôn tiếp lượt ưu tiên mới
+      <div className="mt-7 flex flex-col items-stretch justify-center gap-2.5 sm:mt-8 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        <Button onClick={onNextPriorityBatch} className="w-full sm:w-auto">
+          <RefreshCw className="h-4 w-4 shrink-0" />
+          <span>Ôn tiếp lượt ưu tiên mới</span>
         </Button>
 
         {weakCount > 0 && (
-          <Button variant="secondary" onClick={onReviewWeakCards}>
-            <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-            Ôn lại {weakCount} từ chưa vững
+          <Button
+            variant="secondary"
+            onClick={onReviewWeakCards}
+            className="w-full sm:w-auto"
+          >
+            <Sparkles className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+            <span>Ôn lại {weakCount} từ chưa vững</span>
           </Button>
         )}
 
-        <Button variant="ghost" onClick={onRestartSameDeck}>
-          <RotateCcw className="h-4 w-4" />
-          Học lại bộ thẻ này
+        <Button
+          variant="ghost"
+          onClick={onRestartSameDeck}
+          className="w-full sm:w-auto"
+        >
+          <RotateCcw className="h-4 w-4 shrink-0" />
+          <span>Học lại bộ thẻ này</span>
         </Button>
       </div>
     </div>

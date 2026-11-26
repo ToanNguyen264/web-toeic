@@ -618,13 +618,15 @@ export default function FlashcardPage() {
         />
       ) : currentCard ? (
         <div>
-          <div className="mx-auto mb-4 max-w-3xl">
-            <div className="mb-2 flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
-              <span>
+          <div className="mx-auto mb-3.5 max-w-3xl sm:mb-4">
+            <div className="mb-2 flex items-center justify-between gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+              <span className="min-w-0 truncate">
                 Thẻ {safeIndex + 1} / {sessionDeck.length}
-                {reviewSubsetIds ? " · Ôn lại từ chưa vững" : " · Ưu tiên từ lâu chưa ôn"}
+                <span className="hidden sm:inline">
+                  {reviewSubsetIds ? " · Ôn lại từ chưa vững" : " · Ưu tiên từ lâu chưa ôn"}
+                </span>
               </span>
-              <span>
+              <span className="shrink-0 whitespace-nowrap">
                 Đã chấm {Object.keys(sessionGrades).length}/{sessionDeck.length}
               </span>
             </div>

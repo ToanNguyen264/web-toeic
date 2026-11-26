@@ -9,7 +9,7 @@ import { ThemeToggle } from "../ui/ThemeToggle";
 import { AiSettingsModal } from "../admin/AiSettingsModal";
 
 function navTabClass({ isActive }: { isActive: boolean }) {
-  return `inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition md:flex-none ${
+  return `inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold whitespace-nowrap transition sm:px-4 sm:text-sm md:flex-none ${
     isActive
       ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/20"
       : "text-slate-600 hover:bg-white/80 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/80 dark:hover:text-white"

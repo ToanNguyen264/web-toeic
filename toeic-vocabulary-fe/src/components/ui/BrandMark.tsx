@@ -8,11 +8,11 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
         <span className="absolute -bottom-2 -right-2 h-5 w-5 rounded-full bg-white/25" />
       </div>
       {!compact && (
-        <div>
-          <p className="text-base font-extrabold tracking-tight text-slate-950 dark:text-white">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-extrabold tracking-tight text-slate-950 sm:text-base dark:text-white">
             TOEIC Vocabulary
           </p>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-500">
+          <p className="hidden text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-500 min-[390px]:block">
             Listen · Learn · Remember
           </p>
         </div>
