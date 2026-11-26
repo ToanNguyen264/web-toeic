@@ -1,9 +1,11 @@
 import { ApiError, apiRequest, fetchProtectedBlob } from "../lib/api";
 import type {
+  FlashcardPool,
   Vocabulary,
   VocabularyFormValues,
   MasteryLevel,
   VocabularyPage,
+  VocabularySort,
   VocabularyStatus,
 } from "../types/vocabulary";
 import { PAGE_SIZE } from "../utils/validation";
@@ -14,6 +16,7 @@ type ListOptions = {
   page: number;
   pageSize?: number;
   status: VocabularyStatus;
+  sort?: VocabularySort;
 };
 
 function formDataFor(values: VocabularyFormValues) {
@@ -30,12 +33,19 @@ function formDataFor(values: VocabularyFormValues) {
   return formData;
 }
 
-export async function listVocabularies({ search, page, pageSize = PAGE_SIZE, status }: ListOptions): Promise<VocabularyPage> {
+export async function listVocabularies({
+  search,
+  page,
+  pageSize = PAGE_SIZE,
+  status,
+  sort = "newest",
+}: ListOptions): Promise<VocabularyPage> {
   const params = new URLSearchParams({
     page: String(page),
     pageSize: String(pageSize),
     status,
   });
+  if (sort !== "newest") params.set("sort", sort);
   if (search) params.set("search", search);
   return apiRequest<VocabularyPage>(`/vocabularies?${params}`);
 }
@@ -55,6 +65,40 @@ export async function listAllVocabularies(
     items.push(...result.items);
   }
   return items;
+}
+
+export async function listFlashcardVocabularies(
+  userId: string,
+  search: string,
+  status: VocabularyStatus,
+): Promise<FlashcardPool> {
+  const pageSize = 100;
+  const firstPage = await listVocabularies({
+    userId,
+    search,
+    status,
+    sort: "review_priority",
+    page: 1,
+    pageSize,
+  });
+  const items = [...firstPage.items];
+  const totalPages = Math.ceil(firstPage.total / pageSize);
+
+  for (let page = 2; page <= totalPages; page += 1) {
+    const result = await listVocabularies({
+      userId,
+      search,
+      status,
+      sort: "review_priority",
+      page,
+      pageSize,
+    });
+    items.push(...result.items);
+  }
+  return {
+    items,
+    stats: firstPage.stats,
+  };
 }
 
 export async function hasDuplicateVocabulary(_userId: string, englishWord: string, excludeId?: string) {
@@ -92,6 +136,20 @@ export async function setVocabularyMastery(
     `/vocabularies/${vocabularyId}/mastery`,
     {
       method: "PATCH",
+      body: JSON.stringify({ masteryLevel }),
+    },
+  );
+  return result.item;
+}
+
+export async function reviewVocabulary(
+  vocabularyId: string,
+  masteryLevel: MasteryLevel,
+) {
+  const result = await apiRequest<{ item: Vocabulary }>(
+    `/vocabularies/${vocabularyId}/review`,
+    {
+      method: "POST",
       body: JSON.stringify({ masteryLevel }),
     },
   );

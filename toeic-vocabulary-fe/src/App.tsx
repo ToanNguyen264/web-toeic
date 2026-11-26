@@ -9,12 +9,13 @@ import {
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 const VocabularyPage = lazy(() => import("./pages/VocabularyPage"));
+const FlashcardPage = lazy(() => import("./pages/FlashcardPage"));
 
 export default function App() {
   return (
     <Suspense fallback={<LoadingScreen />}>
       <Routes>
-        <Route path="/" element={<Navigate to="/vocabularies" replace />} />
+        <Route path="/" element={<Navigate to="/listen" replace />} />
         <Route
           path="/login"
           element={
@@ -32,14 +33,23 @@ export default function App() {
           }
         />
         <Route
-          path="/vocabularies"
+          path="/listen"
           element={
             <ProtectedRoute>
               <VocabularyPage />
             </ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/vocabularies" replace />} />
+        <Route
+          path="/flashcards"
+          element={
+            <ProtectedRoute>
+              <FlashcardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/vocabularies" element={<Navigate to="/listen" replace />} />
+        <Route path="*" element={<Navigate to="/listen" replace />} />
       </Routes>
     </Suspense>
   );

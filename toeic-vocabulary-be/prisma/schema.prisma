@@ -53,16 +53,20 @@ model Vocabulary {
   exampleAudioName  String?  @map("example_audio_name") @db.VarChar(255)
   exampleAudioType  String?  @map("example_audio_type") @db.VarChar(100)
   exampleAudioSize  BigInt?  @map("example_audio_size") @db.UnsignedBigInt
-  masteryLevel      String   @default("unlearned") @map("mastery_level") @db.VarChar(20)
-  isLearned         Boolean  @default(false) @map("is_learned")
-  createdAt         DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt         DateTime @updatedAt @map("updated_at") @db.DateTime(3)
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  masteryLevel      String    @default("unlearned") @map("mastery_level") @db.VarChar(20)
+  isLearned         Boolean   @default(false) @map("is_learned")
+  lastReviewedAt    DateTime? @map("last_reviewed_at") @db.DateTime(3)
+  reviewCount       Int       @default(0) @map("review_count") @db.UnsignedInt
+  createdAt         DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, normalizedWord])
   @@index([userId, masteryLevel, createdAt(sort: Desc)])
   @@index([userId, isLearned, createdAt(sort: Desc)])
+  @@index([userId, lastReviewedAt, createdAt(sort: Desc)], map: "vocabularies_user_review_priority_idx")
+  @@index([userId, masteryLevel, lastReviewedAt, createdAt(sort: Desc)], map: "vocabularies_user_mastery_review_priority_idx")
   @@map("vocabularies")
 }
 

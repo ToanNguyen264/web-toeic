@@ -37,6 +37,8 @@ export function vocabularyDto(vocabulary: Vocabulary) {
       vocabulary.exampleAudioSize === null ? null : Number(vocabulary.exampleAudioSize),
     mastery_level: vocabulary.masteryLevel,
     is_learned: vocabulary.isLearned,
+    last_reviewed_at: vocabulary.lastReviewedAt?.toISOString() ?? null,
+    review_count: vocabulary.reviewCount,
     created_at: vocabulary.createdAt.toISOString(),
     updated_at: vocabulary.updatedAt.toISOString(),
   };

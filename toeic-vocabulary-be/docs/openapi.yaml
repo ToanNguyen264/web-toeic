@@ -179,8 +179,9 @@ paths:
       parameters:
         - { name: search, in: query, schema: { type: string, maxLength: 150 } }
         - { name: status, in: query, schema: { type: string, enum: [all, unlearned, learning, mastered], default: all } }
+        - { name: sort, in: query, schema: { type: string, enum: [newest, review_priority], default: newest } }
         - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
-        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
       responses:
         "200":
           description: Trang kết quả
@@ -225,6 +226,29 @@ paths:
     patch:
       tags: [Vocabularies]
       summary: Cập nhật mức độ ghi nhớ của từ vựng
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: "#/components/parameters/VocabularyId" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [masteryLevel]
+              properties:
+                masteryLevel:
+                  type: string
+                  enum: [unlearned, learning, mastered]
+      responses:
+        "200": { $ref: "#/components/responses/VocabularySuccess" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /vocabularies/{id}/review:
+    post:
+      tags: [Vocabularies]
+      summary: Ghi nhận kết quả ôn tập Flashcard (cập nhật mức độ thuộc, thời điểm ôn và số lần ôn)
       security: [{ bearerAuth: [] }]
       parameters: [{ $ref: "#/components/parameters/VocabularyId" }]
       requestBody:
@@ -479,7 +503,7 @@ components:
         exampleAudio: { type: string, format: binary, description: "Audio ví dụ song ngữ, tối đa 5 MB." }
     Vocabulary:
       type: object
-      required: [id, user_id, english_word, normalized_word, vietnamese_meaning, mastery_level, is_learned, created_at, updated_at]
+      required: [id, user_id, english_word, normalized_word, vietnamese_meaning, mastery_level, is_learned, review_count, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
@@ -490,6 +514,10 @@ components:
         audio_name: { type: [string, "null"] }
         audio_type: { type: [string, "null"] }
         audio_size: { type: [integer, "null"] }
+        word_meaning_audio_path: { type: [string, "null"] }
+        word_meaning_audio_name: { type: [string, "null"] }
+        word_meaning_audio_type: { type: [string, "null"] }
+        word_meaning_audio_size: { type: [integer, "null"] }
         example_english: { type: [string, "null"] }
         example_annotated_english: { type: [string, "null"] }
         example_vietnamese: { type: [string, "null"] }
@@ -499,6 +527,8 @@ components:
         example_audio_size: { type: [integer, "null"] }
         mastery_level: { type: string, enum: [unlearned, learning, mastered] }
         is_learned: { type: boolean }
+        last_reviewed_at: { type: [string, "null"], format: date-time }
+        review_count: { type: integer, minimum: 0 }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     VocabularyPage:

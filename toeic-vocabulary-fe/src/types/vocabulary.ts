@@ -21,6 +21,8 @@ export type Vocabulary = {
   example_audio_size: number | null;
   mastery_level: MasteryLevel;
   is_learned: boolean;
+  last_reviewed_at: string | null;
+  review_count: number;
   created_at: string;
   updated_at: string;
 };
@@ -52,3 +54,14 @@ export type VocabularyPage = {
 export type MasteryLevel = "unlearned" | "learning" | "mastered";
 
 export type VocabularyStatus = "all" | MasteryLevel;
+
+export type VocabularySort = "newest" | "review_priority";
+
+export type FlashcardPool = {
+  items: Vocabulary[];
+  stats: {
+    unlearned: number;
+    learning: number;
+    mastered: number;
+  };
+};

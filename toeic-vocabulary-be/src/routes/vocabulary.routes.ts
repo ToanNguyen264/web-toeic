@@ -36,10 +36,14 @@ vocabularyRouter.get("/", async (req, res) => {
         }
       : {}),
   };
+  const orderBy =
+    query.sort === "review_priority"
+      ? [{ lastReviewedAt: "asc" as const }, { createdAt: "desc" as const }]
+      : [{ createdAt: "desc" as const }];
   const [items, total, unlearned, learning, mastered] = await prisma.$transaction([
     prisma.vocabulary.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy,
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
     }),
@@ -113,6 +117,29 @@ vocabularyRouter.patch("/:id/mastery", async (req, res) => {
     data: {
       masteryLevel,
       isLearned: masteryLevel === "mastered",
+    },
+  });
+  res.json({ item: vocabularyDto(vocabulary) });
+});
+
+vocabularyRouter.post("/:id/review", async (req, res) => {
+  const { id } = idParamsSchema.parse(req.params);
+  const { masteryLevel } = masteryStatusSchema.parse(req.body);
+  const current = await prisma.vocabulary.findFirst({
+    where: { id, userId: req.auth!.userId },
+    select: { id: true },
+  });
+  if (!current) {
+    throw new AppError(404, "Không tìm thấy từ vựng.", "VOCABULARY_NOT_FOUND");
+  }
+
+  const vocabulary = await prisma.vocabulary.update({
+    where: { id },
+    data: {
+      masteryLevel,
+      isLearned: masteryLevel === "mastered",
+      lastReviewedAt: new Date(),
+      reviewCount: { increment: 1 },
     },
   });
   res.json({ item: vocabularyDto(vocabulary) });

@@ -41,7 +41,7 @@ export default function RegisterPage() {
       setLoading(true);
       await signUp(email, password);
       showToast("Tạo tài khoản thành công.", "success");
-      navigate("/vocabularies", { replace: true });
+      navigate("/listen", { replace: true });
     } catch (error) {
       showToast(toUserMessage(error, "Không thể tạo tài khoản. Vui lòng thử lại."), "error");
     } finally {

@@ -26,6 +26,6 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 export function PublicOnlyRoute({ children }: { children: ReactNode }) {
   const { user, isLoading } = useAuth();
   if (isLoading) return <LoadingScreen />;
-  if (user) return <Navigate to="/vocabularies" replace />;
+  if (user) return <Navigate to="/listen" replace />;
   return <>{children}</>;
 }

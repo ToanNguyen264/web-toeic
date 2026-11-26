@@ -35,7 +35,7 @@ export default function LoginPage() {
       await signIn(email, password);
       showToast("Đăng nhập thành công.", "success");
       const state = location.state as LocationState;
-      navigate(state?.from?.pathname || "/vocabularies", { replace: true });
+      navigate(state?.from?.pathname || "/listen", { replace: true });
     } catch (error) {
       showToast(toUserMessage(error, "Không thể đăng nhập. Vui lòng thử lại."), "error");
     } finally {
