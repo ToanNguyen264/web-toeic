@@ -8,6 +8,7 @@ import {
   getElevenLabsApiKeys,
   getElevenLabsConfigVersion,
 } from "./app-settings.service.js";
+import { synthesizeVietnameseEdgeSpeech } from "./vietnamese-tts.service.js";
 
 const MAX_GENERATED_AUDIO_BYTES = 5 * 1024 * 1024;
 
@@ -268,21 +269,32 @@ async function combineAudioWithPause(
   }
 }
 
+async function generateVietnameseSpeech(text: string): Promise<Buffer> {
+  if (env.VIETNAMESE_TTS_PROVIDER === "elevenlabs") {
+    if (!env.ELEVENLABS_VI_VOICE_ID) {
+      throw new AppError(
+        503,
+        "Giọng đọc tiếng Việt ElevenLabs chưa được cấu hình.",
+        "TTS_VIETNAMESE_NOT_CONFIGURED",
+      );
+    }
+    return generateSpeechFromKeyPool(text, "vi");
+  }
+
+  return synthesizeVietnameseEdgeSpeech(text, {
+    voice: env.VIETNAMESE_EDGE_VOICE,
+    rate: env.VIETNAMESE_EDGE_RATE,
+    timeoutMs: env.ELEVENLABS_TIMEOUT_MS,
+  });
+}
+
 export async function generateBilingualSpeech(
   english: string,
   vietnamese: string,
 ): Promise<Buffer> {
-  if (!env.ELEVENLABS_VI_VOICE_ID) {
-    throw new AppError(
-      503,
-      "Giọng đọc tiếng Việt chưa được cấu hình.",
-      "TTS_VIETNAMESE_NOT_CONFIGURED",
-    );
-  }
-
   const [englishAudio, vietnameseAudio] = await Promise.all([
     generateSpeechFromKeyPool(english, "en"),
-    generateSpeechFromKeyPool(vietnamese, "vi"),
+    generateVietnameseSpeech(vietnamese),
   ]);
   return combineAudioWithPause(englishAudio, vietnameseAudio);
 }
@@ -395,13 +407,6 @@ async function combineLessonAudio(audioSegments: Buffer[]): Promise<Buffer> {
 export async function generateListeningLesson(
   segments: ListeningLessonSegment[],
 ): Promise<Buffer> {
-  if (!env.ELEVENLABS_VI_VOICE_ID) {
-    throw new AppError(
-      503,
-      "Giọng đọc tiếng Việt chưa được cấu hình.",
-      "TTS_VIETNAMESE_NOT_CONFIGURED",
-    );
-  }
   const mergedSegments = segments.reduce<ListeningLessonSegment[]>((result, segment) => {
     const previous = result.at(-1);
     if (previous?.language === segment.language) {
@@ -412,12 +417,42 @@ export async function generateListeningLesson(
     return result;
   }, []);
 
-  const audioSegments: Buffer[] = [];
-  for (const [index, segment] of mergedSegments.entries()) {
-    if (index > 0) await wait(750);
-    audioSegments.push(
-      await generateSpeechWithQuotaRetry(segment),
+  const usesElevenLabsForVi = env.VIETNAMESE_TTS_PROVIDER === "elevenlabs";
+  if (usesElevenLabsForVi && !env.ELEVENLABS_VI_VOICE_ID) {
+    throw new AppError(
+      503,
+      "Giọng đọc tiếng Việt ElevenLabs chưa được cấu hình.",
+      "TTS_VIETNAMESE_NOT_CONFIGURED",
     );
+  }
+
+  const viAudioByIndex = new Map<number, Buffer>();
+  if (!usesElevenLabsForVi) {
+    const viEntries = mergedSegments
+      .map((segment, index) => ({ segment, index }))
+      .filter((entry) => entry.segment.language === "vi");
+    for (let offset = 0; offset < viEntries.length; offset += 3) {
+      const batch = viEntries.slice(offset, offset + 3);
+      const buffers = await Promise.all(
+        batch.map((entry) => generateVietnameseSpeech(entry.segment.text)),
+      );
+      batch.forEach((entry, batchIdx) => {
+        viAudioByIndex.set(entry.index, buffers[batchIdx]);
+      });
+    }
+  }
+
+  const audioSegments: Buffer[] = [];
+  let hasCalledElevenLabs = false;
+  for (const [index, segment] of mergedSegments.entries()) {
+    const prebuiltVi = viAudioByIndex.get(index);
+    if (prebuiltVi) {
+      audioSegments.push(prebuiltVi);
+      continue;
+    }
+    if (hasCalledElevenLabs) await wait(750);
+    hasCalledElevenLabs = true;
+    audioSegments.push(await generateSpeechWithQuotaRetry(segment));
   }
   return combineLessonAudio(audioSegments);
 }
