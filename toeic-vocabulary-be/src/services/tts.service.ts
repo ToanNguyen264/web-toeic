@@ -8,20 +8,10 @@ import {
   getElevenLabsApiKeys,
   getElevenLabsConfigVersion,
 } from "./app-settings.service.js";
-import {
-  synthesizeEdgeNeuralSpeech,
-  synthesizeVietnameseEdgeSpeech,
-} from "./vietnamese-tts.service.js";
+import { synthesizeFreeSpeech } from "./vietnamese-tts.service.js";
 
 const MAX_GENERATED_AUDIO_BYTES = 5 * 1024 * 1024;
-
-// Default ElevenLabs premade English voices compatible with Free-tier API keys
-const FREE_FALLBACK_ENGLISH_VOICES = [
-  "JBFqnCBsd6RMkjVDRZzb", // George
-  "EXAVITQu4vr4xnSDxMaL", // Sarah
-  "cgSgspJ2msm6clMCkdW9", // Jessica
-  "nPczCjzI2devNBz1zQrb", // Brian
-];
+const DEFAULT_FREE_ELEVENLABS_VOICE = "EXAVITQu4vr4xnSDxMaL";
 
 export type ElevenLabsConfig = {
   apiKey: string;
@@ -32,59 +22,35 @@ export type ElevenLabsConfig = {
   languageCode?: "en" | "vi";
 };
 
+export type ListeningLessonSegment = {
+  language: "en" | "vi";
+  text: string;
+};
+
 function supportsLanguageCode(modelId: string): boolean {
   const lower = modelId.toLowerCase();
   return lower.includes("v2_5") || lower.includes("v3") || lower.includes("v4");
 }
 
-function englishConfig(apiKey: string, voiceId = env.ELEVENLABS_VOICE_ID): ElevenLabsConfig {
-  const resolvedVoice = voiceId || FREE_FALLBACK_ENGLISH_VOICES[0];
-  return {
-    apiKey,
-    voiceId: resolvedVoice,
-    modelId: env.ELEVENLABS_MODEL_ID,
-    apiBaseUrl: env.ELEVENLABS_API_BASE_URL,
+function generateFreeEnglishSpeech(text: string): Promise<Buffer> {
+  return synthesizeFreeSpeech(text, {
+    language: "en",
+    voice: env.ENGLISH_FALLBACK_EDGE_VOICE,
+    rate: env.ENGLISH_FALLBACK_EDGE_RATE,
     timeoutMs: env.ELEVENLABS_TIMEOUT_MS,
-    languageCode: "en",
-  };
+  });
 }
 
-function vietnameseEnvironmentConfig(apiKey: string): ElevenLabsConfig {
-  return {
-    apiKey,
-    voiceId: env.ELEVENLABS_VI_VOICE_ID || FREE_FALLBACK_ENGLISH_VOICES[1],
-    modelId: env.ELEVENLABS_VI_MODEL_ID,
-    apiBaseUrl: env.ELEVENLABS_API_BASE_URL,
+function generateFreeVietnameseSpeech(text: string): Promise<Buffer> {
+  return synthesizeFreeSpeech(text, {
+    language: "vi",
+    voice: env.VIETNAMESE_EDGE_VOICE,
+    rate: env.VIETNAMESE_EDGE_RATE,
     timeoutMs: env.ELEVENLABS_TIMEOUT_MS,
-    languageCode: "vi",
-  };
+  });
 }
 
-async function resolveFreeCompatibleVoiceId(apiKey: string, excludedVoiceId: string): Promise<string> {
-  try {
-    const response = await fetch(new URL("/v1/voices", env.ELEVENLABS_API_BASE_URL), {
-      headers: { "xi-api-key": apiKey },
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (response.ok) {
-      const data = (await response.json()) as {
-        voices?: Array<{ voice_id?: string; category?: string }>;
-      };
-      const premade = data.voices?.find(
-        (v) => v.category === "premade" && v.voice_id && v.voice_id !== excludedVoiceId,
-      );
-      if (premade?.voice_id) return premade.voice_id;
-    }
-  } catch {
-    // Fall back to static premade list below
-  }
-  return (
-    FREE_FALLBACK_ENGLISH_VOICES.find((id) => id !== excludedVoiceId) ??
-    FREE_FALLBACK_ENGLISH_VOICES[0]
-  );
-}
-
-async function callElevenLabsSpeechOnce(
+async function callElevenLabsSpeech(
   text: string,
   resolvedConfig: ElevenLabsConfig,
 ): Promise<Buffer> {
@@ -133,159 +99,47 @@ async function callElevenLabsSpeechOnce(
   }
 
   if (!response.ok) {
-    let detailStatus = "";
-    let detailMessage = "";
-    try {
-      const errBody = (await response.json()) as {
-        detail?: { status?: string; message?: string } | string;
-      };
-      if (typeof errBody.detail === "string") {
-        detailMessage = errBody.detail;
-      } else if (errBody.detail) {
-        detailStatus = errBody.detail.status ?? "";
-        detailMessage = errBody.detail.message ?? "";
-      }
-    } catch {
-      // Ignore non-JSON error body
-    }
-
-    if (
-      response.status === 402 ||
-      response.status === 404 ||
-      detailStatus === "paid_plan_required" ||
-      detailStatus === "free_users_not_allowed" ||
-      detailStatus === "voice_not_found"
-    ) {
-      if (detailStatus === "quota_exceeded" || detailMessage.toLowerCase().includes("quota")) {
-        throw new AppError(
-          429,
-          "API key ElevenLabs đã hết hạn mức token trong tháng.",
-          "TTS_QUOTA_EXCEEDED",
-        );
-      }
-      throw new AppError(
-        402,
-        "Giọng đọc này yêu cầu gói trả phí trên ElevenLabs.",
-        "TTS_PAID_VOICE_REQUIRED",
-      );
-    }
-
     if (response.status === 401 || response.status === 403) {
-      if (detailStatus === "quota_exceeded") {
-        throw new AppError(
-          429,
-          "API key ElevenLabs đã hết hạn mức token.",
-          "TTS_QUOTA_EXCEEDED",
-        );
-      }
-      throw new AppError(
-        502,
-        detailStatus === "detected_unusual_activity"
-          ? "ElevenLabs tạm khóa Free API trên địa chỉ IP này."
-          : "Dịch vụ tạo audio từ chối API key.",
-        "TTS_PROVIDER_AUTH_ERROR",
-      );
+      throw new AppError(502, "Dịch vụ tạo audio từ chối API key.", "TTS_PROVIDER_AUTH_ERROR");
     }
-
+    if (response.status === 402) {
+      throw new AppError(402, "Giọng đọc yêu cầu gói trả phí.", "TTS_PAID_VOICE_REQUIRED");
+    }
     if (response.status === 429) {
-      throw new AppError(
-        429,
-        "Đã hết lượt hoặc đang tạo audio quá nhanh. Vui lòng thử lại sau.",
-        "TTS_QUOTA_EXCEEDED",
-      );
+      throw new AppError(429, "Đã hết lượt tạo audio ElevenLabs.", "TTS_QUOTA_EXCEEDED");
     }
-
     throw new AppError(502, "Dịch vụ tạo audio đang gặp lỗi.", "TTS_PROVIDER_ERROR");
   }
 
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   if (!contentType.startsWith("audio/")) {
-    throw new AppError(
-      502,
-      "Dịch vụ tạo audio trả về dữ liệu không hợp lệ.",
-      "TTS_INVALID_AUDIO",
-    );
+    throw new AppError(502, "Dữ liệu audio không hợp lệ.", "TTS_INVALID_AUDIO");
   }
 
   const audio = Buffer.from(await response.arrayBuffer());
   if (audio.length === 0 || audio.length > MAX_GENERATED_AUDIO_BYTES) {
-    throw new AppError(
-      502,
-      "File audio được tạo không hợp lệ hoặc vượt quá 5 MB.",
-      "TTS_INVALID_AUDIO",
-    );
+    throw new AppError(502, "File audio vượt quá 5 MB hoặc rỗng.", "TTS_INVALID_AUDIO");
   }
   return audio;
-}
-
-const resolvedVoiceByKeyCache = new Map<string, string>();
-
-export async function generateSpeech(
-  text: string,
-  config?: ElevenLabsConfig,
-): Promise<Buffer> {
-  if (!config) return generateSpeechFromKeyPool(text, "en");
-  if (!config.apiKey || !config.voiceId) {
-    throw new AppError(
-      503,
-      "Tính năng tạo audio AI chưa được cấu hình.",
-      "TTS_NOT_CONFIGURED",
-    );
-  }
-
-  const cachedVoice =
-    config.languageCode === "en" ? resolvedVoiceByKeyCache.get(config.apiKey) : undefined;
-  const initialConfig = cachedVoice ? { ...config, voiceId: cachedVoice } : config;
-
-  try {
-    return await callElevenLabsSpeechOnce(text, initialConfig);
-  } catch (error) {
-    // Free-tier key hit a Library/Paid-only voice: auto-switch to a Free premade voice!
-    if (
-      error instanceof AppError &&
-      error.code === "TTS_PAID_VOICE_REQUIRED" &&
-      config.languageCode === "en"
-    ) {
-      const fallbackVoiceId = await resolveFreeCompatibleVoiceId(
-        config.apiKey,
-        initialConfig.voiceId,
-      );
-      const audio = await callElevenLabsSpeechOnce(text, {
-        ...config,
-        voiceId: fallbackVoiceId,
-      });
-      resolvedVoiceByKeyCache.set(config.apiKey, fallbackVoiceId);
-      return audio;
-    }
-    throw error;
-  }
-}
-
-async function generateEnglishEdgeFallback(text: string): Promise<Buffer> {
-  return synthesizeEdgeNeuralSpeech(text, {
-    voice: env.ENGLISH_FALLBACK_EDGE_VOICE,
-    rate: env.ENGLISH_FALLBACK_EDGE_RATE,
-    timeoutMs: env.ELEVENLABS_TIMEOUT_MS,
-  });
 }
 
 let preferredElevenLabsKeyId: string | null = null;
 let seenConfigVersion = -1;
 
-async function generateSpeechFromKeyPool(text: string, language: "en" | "vi"): Promise<Buffer> {
+async function generateEnglishViaConfiguredProvider(text: string): Promise<Buffer> {
+  if (env.TTS_PROVIDER === "free") {
+    return generateFreeEnglishSpeech(text);
+  }
+
   const currentVersion = getElevenLabsConfigVersion();
   if (currentVersion !== seenConfigVersion) {
     preferredElevenLabsKeyId = null;
-    resolvedVoiceByKeyCache.clear();
     seenConfigVersion = currentVersion;
   }
 
   const keys = await getElevenLabsApiKeys();
   if (!keys.length) {
-    if (language === "en") {
-      return generateEnglishEdgeFallback(text);
-    }
-    throw new AppError(503, "Tính năng tạo audio AI chưa được cấu hình.", "TTS_NOT_CONFIGURED");
+    return generateFreeEnglishSpeech(text);
   }
 
   const orderedKeys = [...keys].sort((a, b) => {
@@ -294,79 +148,74 @@ async function generateSpeechFromKeyPool(text: string, language: "en" | "vi"): P
     return 0;
   });
 
-  let lastError: unknown;
   for (const key of orderedKeys) {
     try {
-      const audio = await generateSpeech(
-        text,
-        language === "en" ? englishConfig(key.apiKey) : vietnameseEnvironmentConfig(key.apiKey),
-      );
+      const audio = await callElevenLabsSpeech(text, {
+        apiKey: key.apiKey,
+        voiceId: env.ELEVENLABS_VOICE_ID || DEFAULT_FREE_ELEVENLABS_VOICE,
+        modelId: env.ELEVENLABS_MODEL_ID,
+        apiBaseUrl: env.ELEVENLABS_API_BASE_URL,
+        timeoutMs: env.ELEVENLABS_TIMEOUT_MS,
+        languageCode: "en",
+      });
       preferredElevenLabsKeyId = key.id;
       return audio;
-    } catch (error) {
-      lastError = error;
-      const canRotate =
-        error instanceof AppError &&
-        (error.code === "TTS_PROVIDER_AUTH_ERROR" ||
-          error.code === "TTS_QUOTA_EXCEEDED" ||
-          error.code === "TTS_PAID_VOICE_REQUIRED" ||
-          error.code === "TTS_PROVIDER_ERROR" ||
-          error.code === "TTS_TIMEOUT");
-      if (!canRotate) break;
-    }
-  }
-
-  // Automatic Free fallback: if ElevenLabs rejects Free keys (paid voice, IP block, quota, rate limit),
-  // seamlessly synthesize English with Microsoft Edge Neural TTS so Free users are never blocked.
-  if (language === "en") {
-    try {
-      return await generateEnglishEdgeFallback(text);
     } catch {
-      // If fallback also fails, surface original ElevenLabs error below.
+      // Try next key, then fall back to free speech below
     }
   }
 
-  throw lastError;
+  return generateFreeEnglishSpeech(text);
 }
 
-async function combineAudioWithPause(
-  englishAudio: Buffer,
-  vietnameseAudio: Buffer,
+export async function generateSpeech(
+  text: string,
+  config?: ElevenLabsConfig,
 ): Promise<Buffer> {
-  const workingDirectory = await mkdtemp(join(tmpdir(), "toeic-example-audio-"));
-  const englishPath = join(workingDirectory, "english.mp3");
-  const vietnamesePath = join(workingDirectory, "vietnamese.mp3");
-  const outputPath = join(workingDirectory, "combined.mp3");
+  if (config) {
+    return callElevenLabsSpeech(text, config);
+  }
+  return generateEnglishViaConfiguredProvider(text);
+}
+
+async function combineAudioSegmentsWithPause(
+  audioSegments: Buffer[],
+  pauseSeconds: number,
+  errorMessage: string,
+): Promise<Buffer> {
+  if (audioSegments.length === 0) {
+    throw new AppError(400, "Không có đoạn âm thanh nào để ghép.", "TTS_EMPTY_SEGMENTS");
+  }
+
+  const workingDirectory = await mkdtemp(join(tmpdir(), "toeic-tts-audio-"));
+  const paths = audioSegments.map((_, index) => join(workingDirectory, `${index}.mp3`));
+  const outputPath = join(workingDirectory, "output.mp3");
 
   try {
-    await Promise.all([
-      writeFile(englishPath, englishAudio),
-      writeFile(vietnamesePath, vietnameseAudio),
-    ]);
+    await Promise.all(audioSegments.map((audio, index) => writeFile(paths[index], audio)));
 
     await new Promise<void>((resolve, reject) => {
-      const process = spawn(
+      const filters = audioSegments.map((_, index) => {
+        const padFilter =
+          index < audioSegments.length - 1 ? `,apad=pad_dur=${pauseSeconds}` : "";
+        return `[${index}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo${padFilter}[a${index}]`;
+      });
+      const concatInputs = audioSegments.map((_, index) => `[a${index}]`).join("");
+      const filterComplex =
+        audioSegments.length === 1
+          ? `${filters[0]};[a0]anull[out]`
+          : `${filters.join(";")};${concatInputs}concat=n=${audioSegments.length}:v=0:a=1[out]`;
+
+      const child = spawn(
         "ffmpeg",
         [
           "-hide_banner",
           "-loglevel",
           "error",
           "-y",
-          "-i",
-          englishPath,
-          "-f",
-          "lavfi",
-          "-t",
-          "1",
-          "-i",
-          "anullsrc=channel_layout=stereo:sample_rate=44100",
-          "-i",
-          vietnamesePath,
+          ...paths.flatMap((filePath) => ["-i", filePath]),
           "-filter_complex",
-          "[0:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[en];" +
-            "[1:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[pause];" +
-            "[2:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[vi];" +
-            "[en][pause][vi]concat=n=3:v=0:a=1[out]",
+          filterComplex,
           "-map",
           "[out]",
           "-codec:a",
@@ -379,16 +228,16 @@ async function combineAudioWithPause(
       );
 
       let errorOutput = "";
-      process.stderr.on("data", (chunk: Buffer) => {
+      child.stderr.on("data", (chunk: Buffer) => {
         if (errorOutput.length < 4_000) errorOutput += chunk.toString();
       });
-      const timeout = setTimeout(() => process.kill("SIGKILL"), 30_000);
+      const timeout = setTimeout(() => child.kill("SIGKILL"), 45_000);
 
-      process.on("error", (error) => {
+      child.on("error", (error) => {
         clearTimeout(timeout);
         reject(error);
       });
-      process.on("close", (code) => {
+      child.on("close", (code) => {
         clearTimeout(timeout);
         if (code === 0) resolve();
         else reject(new Error(errorOutput || `ffmpeg exited with code ${code}`));
@@ -402,33 +251,10 @@ async function combineAudioWithPause(
     return combinedAudio;
   } catch (error) {
     if (error instanceof AppError) throw error;
-    throw new AppError(
-      500,
-      "Không thể ghép audio tiếng Anh và tiếng Việt.",
-      "TTS_AUDIO_COMBINE_ERROR",
-    );
+    throw new AppError(500, errorMessage, "TTS_AUDIO_COMBINE_ERROR");
   } finally {
     await rm(workingDirectory, { recursive: true, force: true });
   }
-}
-
-async function generateVietnameseSpeech(text: string): Promise<Buffer> {
-  if (env.VIETNAMESE_TTS_PROVIDER === "elevenlabs") {
-    if (!env.ELEVENLABS_VI_VOICE_ID) {
-      throw new AppError(
-        503,
-        "Giọng đọc tiếng Việt ElevenLabs chưa được cấu hình.",
-        "TTS_VIETNAMESE_NOT_CONFIGURED",
-      );
-    }
-    return generateSpeechFromKeyPool(text, "vi");
-  }
-
-  return synthesizeVietnameseEdgeSpeech(text, {
-    voice: env.VIETNAMESE_EDGE_VOICE,
-    rate: env.VIETNAMESE_EDGE_RATE,
-    timeoutMs: env.ELEVENLABS_TIMEOUT_MS,
-  });
 }
 
 export async function generateBilingualSpeech(
@@ -436,112 +262,14 @@ export async function generateBilingualSpeech(
   vietnamese: string,
 ): Promise<Buffer> {
   const [englishAudio, vietnameseAudio] = await Promise.all([
-    generateSpeechFromKeyPool(english, "en"),
-    generateVietnameseSpeech(vietnamese),
+    generateEnglishViaConfiguredProvider(english),
+    generateFreeVietnameseSpeech(vietnamese),
   ]);
-  return combineAudioWithPause(englishAudio, vietnameseAudio);
-}
-
-export type ListeningLessonSegment = {
-  language: "en" | "vi";
-  text: string;
-};
-
-function wait(milliseconds: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
-}
-
-async function generateSpeechWithQuotaRetry(segment: ListeningLessonSegment) {
-  const retryDelays = [2_000, 4_000];
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await generateSpeechFromKeyPool(segment.text, segment.language);
-    } catch (error) {
-      const canRetry =
-        error instanceof AppError &&
-        error.code === "TTS_QUOTA_EXCEEDED" &&
-        attempt < retryDelays.length;
-      if (!canRetry) throw error;
-      await wait(retryDelays[attempt]);
-    }
-  }
-}
-
-async function combineLessonAudio(audioSegments: Buffer[]): Promise<Buffer> {
-  const workingDirectory = await mkdtemp(join(tmpdir(), "toeic-listening-lesson-"));
-  const paths = audioSegments.map((_, index) => join(workingDirectory, `${index}.mp3`));
-  const outputPath = join(workingDirectory, "lesson.mp3");
-  try {
-    await Promise.all(audioSegments.map((audio, index) => writeFile(paths[index], audio)));
-    await new Promise<void>((resolve, reject) => {
-      const pauseCount = Math.max(0, audioSegments.length - 1);
-      const audioFilters = audioSegments.map(
-        (_, index) =>
-          `[${index}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[a${index}]`,
-      );
-      const pauseFilters = Array.from({ length: pauseCount }, (_, index) => {
-        const inputIndex = audioSegments.length + index;
-        return `[${inputIndex}:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[p${index}]`;
-      });
-      const concatInputs = audioSegments
-        .map((_, index) =>
-          index < audioSegments.length - 1 ? `[a${index}][p${index}]` : `[a${index}]`,
-        )
-        .join("");
-      const process = spawn(
-        "ffmpeg",
-        [
-          "-hide_banner",
-          "-loglevel",
-          "error",
-          "-y",
-          ...paths.flatMap((path) => ["-i", path]),
-          ...Array.from({ length: pauseCount }, () => [
-            "-f",
-            "lavfi",
-            "-t",
-            "0.45",
-            "-i",
-            "anullsrc=channel_layout=stereo:sample_rate=44100",
-          ]).flat(),
-          "-filter_complex",
-          `${[...audioFilters, ...pauseFilters].join(";")};${concatInputs}concat=n=${audioSegments.length * 2 - 1}:v=0:a=1[out]`,
-          "-map",
-          "[out]",
-          "-codec:a",
-          "libmp3lame",
-          "-b:a",
-          "128k",
-          outputPath,
-        ],
-        { stdio: ["ignore", "ignore", "pipe"] },
-      );
-      let errorOutput = "";
-      process.stderr.on("data", (chunk: Buffer) => {
-        if (errorOutput.length < 4_000) errorOutput += chunk.toString();
-      });
-      const timeout = setTimeout(() => process.kill("SIGKILL"), 60_000);
-      process.on("error", (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      });
-      process.on("close", (code) => {
-        clearTimeout(timeout);
-        if (code === 0) resolve();
-        else reject(new Error(errorOutput || `ffmpeg exited with code ${code}`));
-      });
-    });
-    const combinedAudio = await readFile(outputPath);
-    if (combinedAudio.length === 0 || combinedAudio.length > MAX_GENERATED_AUDIO_BYTES) {
-      throw new Error("Listening lesson has an invalid size");
-    }
-    return combinedAudio;
-  } catch (error) {
-    if (error instanceof AppError) throw error;
-    throw new AppError(500, "Không thể ghép audio bài giảng.", "TTS_AUDIO_COMBINE_ERROR");
-  } finally {
-    await rm(workingDirectory, { recursive: true, force: true });
-  }
+  return combineAudioSegmentsWithPause(
+    [englishAudio, vietnameseAudio],
+    1,
+    "Không thể ghép audio tiếng Anh và tiếng Việt.",
+  );
 }
 
 export async function generateListeningLesson(
@@ -557,42 +285,24 @@ export async function generateListeningLesson(
     return result;
   }, []);
 
-  const usesElevenLabsForVi = env.VIETNAMESE_TTS_PROVIDER === "elevenlabs";
-  if (usesElevenLabsForVi && !env.ELEVENLABS_VI_VOICE_ID) {
-    throw new AppError(
-      503,
-      "Giọng đọc tiếng Việt ElevenLabs chưa được cấu hình.",
-      "TTS_VIETNAMESE_NOT_CONFIGURED",
+  const audioSegments: Buffer[] = new Array(mergedSegments.length);
+  for (let offset = 0; offset < mergedSegments.length; offset += 4) {
+    const batch = mergedSegments.slice(offset, offset + 4);
+    const batchBuffers = await Promise.all(
+      batch.map((segment) =>
+        segment.language === "vi"
+          ? generateFreeVietnameseSpeech(segment.text)
+          : generateEnglishViaConfiguredProvider(segment.text),
+      ),
     );
+    batchBuffers.forEach((buf, idx) => {
+      audioSegments[offset + idx] = buf;
+    });
   }
 
-  const viAudioByIndex = new Map<number, Buffer>();
-  if (!usesElevenLabsForVi) {
-    const viEntries = mergedSegments
-      .map((segment, index) => ({ segment, index }))
-      .filter((entry) => entry.segment.language === "vi");
-    for (let offset = 0; offset < viEntries.length; offset += 3) {
-      const batch = viEntries.slice(offset, offset + 3);
-      const buffers = await Promise.all(
-        batch.map((entry) => generateVietnameseSpeech(entry.segment.text)),
-      );
-      batch.forEach((entry, batchIdx) => {
-        viAudioByIndex.set(entry.index, buffers[batchIdx]);
-      });
-    }
-  }
-
-  const audioSegments: Buffer[] = [];
-  let hasCalledElevenLabs = false;
-  for (const [index, segment] of mergedSegments.entries()) {
-    const prebuiltVi = viAudioByIndex.get(index);
-    if (prebuiltVi) {
-      audioSegments.push(prebuiltVi);
-      continue;
-    }
-    if (hasCalledElevenLabs) await wait(750);
-    hasCalledElevenLabs = true;
-    audioSegments.push(await generateSpeechWithQuotaRetry(segment));
-  }
-  return combineLessonAudio(audioSegments);
+  return combineAudioSegmentsWithPause(
+    audioSegments,
+    0.45,
+    "Không thể ghép audio bài giảng.",
+  );
 }

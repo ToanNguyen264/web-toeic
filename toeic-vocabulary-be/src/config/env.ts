@@ -23,6 +23,7 @@ const envSchema = z.object({
   COOKIE_SECURE: booleanFromString,
   ADMIN_EMAIL: z.string().trim().toLowerCase().email().default("toan@gmail.com"),
   AUDIO_STORAGE_DIR: z.string().min(1).default("./uploads/audio"),
+  TTS_PROVIDER: z.enum(["free", "elevenlabs"]).default("free"),
   ELEVENLABS_API_KEY: z.string().trim().default(""),
   ELEVENLABS_VOICE_ID: z.string().trim().default(""),
   ELEVENLABS_MODEL_ID: z.string().trim().min(1).default("eleven_flash_v2_5"),
