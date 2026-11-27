@@ -71,7 +71,7 @@ function buildListeningLessonSegments(
     const vietnameseMeaning = cleanText(annotation.vietnamese);
     if (hasSpeakableText(difficultWord) && hasSpeakableText(vietnameseMeaning)) {
       segments.push({ language: "en", text: difficultWord });
-      segments.push({ language: "vi", text: `nghĩa là ${vietnameseMeaning}` });
+      segments.push({ language: "vi", text: vietnameseMeaning });
     }
   }
   segments.push({ language: "en", text: english });
