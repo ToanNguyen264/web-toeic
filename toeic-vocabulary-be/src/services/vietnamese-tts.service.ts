@@ -256,23 +256,23 @@ async function synthesizeOnce(
   });
 }
 
-export type VietnameseEdgeTtsOptions = {
+export type EdgeNeuralTtsOptions = {
   voice: string;
   rate: string;
   timeoutMs: number;
 };
 
-export async function synthesizeVietnameseEdgeSpeech(
+export async function synthesizeEdgeNeuralSpeech(
   rawText: string,
-  options: VietnameseEdgeTtsOptions,
+  options: EdgeNeuralTtsOptions,
 ): Promise<Buffer> {
   const normalized = normalizeVietnameseText(rawText);
   if (!normalized) {
-    throw new AppError(400, "Nội dung tiếng Việt trống.", "TTS_EMPTY_TEXT");
+    throw new AppError(400, "Nội dung cần đọc đang trống.", "TTS_EMPTY_TEXT");
   }
 
   const localeMatch = /\b[a-z]{2,}-[A-Z]{2}\b/.exec(options.voice);
-  const xmlLang = localeMatch?.[0] ?? "vi-VN";
+  const xmlLang = localeMatch?.[0] ?? "en-US";
   const ssml =
     `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${xmlLang}">` +
     `<voice name="${escapeXml(options.voice)}">` +
@@ -289,7 +289,7 @@ export async function synthesizeVietnameseEdgeSpeech(
       if (audio.length === 0 || !isValidAudioSignature(audio, "audio/mpeg")) {
         throw new AppError(
           502,
-          "Dịch vụ đọc tiếng Việt trả về dữ liệu audio không hợp lệ.",
+          "Dịch vụ tạo giọng nói trả về dữ liệu audio không hợp lệ.",
           "TTS_INVALID_AUDIO",
         );
       }
@@ -313,7 +313,9 @@ export async function synthesizeVietnameseEdgeSpeech(
   if (lastError instanceof AppError) throw lastError;
   throw new AppError(
     502,
-    "Không thể tạo giọng đọc tiếng Việt. Vui lòng thử lại sau.",
-    "TTS_VIETNAMESE_PROVIDER_ERROR",
+    "Không thể tạo giọng đọc AI. Vui lòng thử lại sau.",
+    "TTS_EDGE_PROVIDER_ERROR",
   );
 }
+
+export const synthesizeVietnameseEdgeSpeech = synthesizeEdgeNeuralSpeech;

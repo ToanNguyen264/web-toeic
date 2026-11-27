@@ -31,6 +31,12 @@ const envSchema = z.object({
   VIETNAMESE_TTS_PROVIDER: z.enum(["edge", "elevenlabs"]).default("edge"),
   VIETNAMESE_EDGE_VOICE: z.string().trim().min(1).default("vi-VN-HoaiMyNeural"),
   VIETNAMESE_EDGE_RATE: z.string().trim().min(1).default("+0%"),
+  ENGLISH_FALLBACK_EDGE_VOICE: z
+    .string()
+    .trim()
+    .min(1)
+    .default("en-US-AvaMultilingualNeural"),
+  ENGLISH_FALLBACK_EDGE_RATE: z.string().trim().min(1).default("+0%"),
   ELEVENLABS_API_BASE_URL: z.string().url().default("https://api.elevenlabs.io"),
   ELEVENLABS_TIMEOUT_MS: z.coerce.number().int().min(1000).max(60_000).default(15_000),
   GEMINI_API_KEY: z.string().trim().default(""),

@@ -98,12 +98,13 @@ export async function fetchProtectedBlob(path: string, init: RequestInit = {}) {
     }
   }
   if (!response.ok) {
-    const body = await parseResponse<{ message?: string; code?: string; details?: unknown }>(response);
+    const body = await parseResponse<{ message?: string; code?: string; details?: unknown } | string>(response);
+    const parsedObj = typeof body === "object" && body !== null ? body : undefined;
     throw new ApiError(
-      body.message || "Không thể tải audio.",
+      parsedObj?.message || `Không thể tải audio (mã ${response.status}).`,
       response.status,
-      body.code,
-      body.details,
+      parsedObj?.code,
+      parsedObj?.details,
     );
   }
   return response.blob();

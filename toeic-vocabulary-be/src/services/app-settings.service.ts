@@ -181,9 +181,35 @@ async function inspectElevenLabsKey(apiKey: string): Promise<ElevenLabsQuotaInfo
     ]);
 
     if (!subscriptionResponse.ok) {
+      let detailStatus: string | undefined;
+      try {
+        const errBody = (await subscriptionResponse.json()) as {
+          detail?: { status?: string; message?: string };
+        };
+        detailStatus = errBody.detail?.status;
+      } catch {
+        // Ignore non-JSON error body
+      }
+
+      if (detailStatus === "missing_permissions") {
+        return {
+          valid: true,
+          account_id: null,
+          workspace_id: null,
+          tier: "scoped-key (ẩn số dư)",
+          status: "active",
+          used: null,
+          limit: null,
+          remaining: null,
+          reset_at: null,
+          checked_at: checkedAt,
+          error: null,
+        };
+      }
+
       const errorMessage =
         subscriptionResponse.status === 401 || subscriptionResponse.status === 403
-          ? "API key không hợp lệ hoặc chưa bật quyền đọc thông tin tài khoản (user_read)."
+          ? "API key không hợp lệ hoặc đã bị thu hồi."
           : `ElevenLabs trả về mã lỗi ${subscriptionResponse.status}.`;
       return {
         valid: false,

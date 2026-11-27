@@ -8,9 +8,20 @@ import {
   getElevenLabsApiKeys,
   getElevenLabsConfigVersion,
 } from "./app-settings.service.js";
-import { synthesizeVietnameseEdgeSpeech } from "./vietnamese-tts.service.js";
+import {
+  synthesizeEdgeNeuralSpeech,
+  synthesizeVietnameseEdgeSpeech,
+} from "./vietnamese-tts.service.js";
 
 const MAX_GENERATED_AUDIO_BYTES = 5 * 1024 * 1024;
+
+// Default ElevenLabs premade English voices compatible with Free-tier API keys
+const FREE_FALLBACK_ENGLISH_VOICES = [
+  "JBFqnCBsd6RMkjVDRZzb", // George
+  "EXAVITQu4vr4xnSDxMaL", // Sarah
+  "cgSgspJ2msm6clMCkdW9", // Jessica
+  "nPczCjzI2devNBz1zQrb", // Brian
+];
 
 export type ElevenLabsConfig = {
   apiKey: string;
@@ -21,10 +32,16 @@ export type ElevenLabsConfig = {
   languageCode?: "en" | "vi";
 };
 
-function englishConfig(apiKey: string): ElevenLabsConfig {
+function supportsLanguageCode(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return lower.includes("v2_5") || lower.includes("v3") || lower.includes("v4");
+}
+
+function englishConfig(apiKey: string, voiceId = env.ELEVENLABS_VOICE_ID): ElevenLabsConfig {
+  const resolvedVoice = voiceId || FREE_FALLBACK_ENGLISH_VOICES[0];
   return {
     apiKey,
-    voiceId: env.ELEVENLABS_VOICE_ID,
+    voiceId: resolvedVoice,
     modelId: env.ELEVENLABS_MODEL_ID,
     apiBaseUrl: env.ELEVENLABS_API_BASE_URL,
     timeoutMs: env.ELEVENLABS_TIMEOUT_MS,
@@ -35,7 +52,7 @@ function englishConfig(apiKey: string): ElevenLabsConfig {
 function vietnameseEnvironmentConfig(apiKey: string): ElevenLabsConfig {
   return {
     apiKey,
-    voiceId: env.ELEVENLABS_VI_VOICE_ID,
+    voiceId: env.ELEVENLABS_VI_VOICE_ID || FREE_FALLBACK_ENGLISH_VOICES[1],
     modelId: env.ELEVENLABS_VI_MODEL_ID,
     apiBaseUrl: env.ELEVENLABS_API_BASE_URL,
     timeoutMs: env.ELEVENLABS_TIMEOUT_MS,
@@ -43,20 +60,34 @@ function vietnameseEnvironmentConfig(apiKey: string): ElevenLabsConfig {
   };
 }
 
-export async function generateSpeech(
-  text: string,
-  config?: ElevenLabsConfig,
-): Promise<Buffer> {
-  if (!config) return generateSpeechFromKeyPool(text, "en");
-  const resolvedConfig = config;
-  if (!resolvedConfig.apiKey || !resolvedConfig.voiceId) {
-    throw new AppError(
-      503,
-      "Tính năng tạo audio AI chưa được cấu hình.",
-      "TTS_NOT_CONFIGURED",
-    );
+async function resolveFreeCompatibleVoiceId(apiKey: string, excludedVoiceId: string): Promise<string> {
+  try {
+    const response = await fetch(new URL("/v1/voices", env.ELEVENLABS_API_BASE_URL), {
+      headers: { "xi-api-key": apiKey },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (response.ok) {
+      const data = (await response.json()) as {
+        voices?: Array<{ voice_id?: string; category?: string }>;
+      };
+      const premade = data.voices?.find(
+        (v) => v.category === "premade" && v.voice_id && v.voice_id !== excludedVoiceId,
+      );
+      if (premade?.voice_id) return premade.voice_id;
+    }
+  } catch {
+    // Fall back to static premade list below
   }
+  return (
+    FREE_FALLBACK_ENGLISH_VOICES.find((id) => id !== excludedVoiceId) ??
+    FREE_FALLBACK_ENGLISH_VOICES[0]
+  );
+}
 
+async function callElevenLabsSpeechOnce(
+  text: string,
+  resolvedConfig: ElevenLabsConfig,
+): Promise<Buffer> {
   const url = new URL(
     `/v1/text-to-speech/${encodeURIComponent(resolvedConfig.voiceId)}`,
     resolvedConfig.apiBaseUrl,
@@ -75,7 +106,7 @@ export async function generateSpeech(
       body: JSON.stringify({
         text,
         model_id: resolvedConfig.modelId,
-        ...(resolvedConfig.languageCode
+        ...(resolvedConfig.languageCode && supportsLanguageCode(resolvedConfig.modelId)
           ? { language_code: resolvedConfig.languageCode }
           : {}),
         voice_settings: {
@@ -102,20 +133,60 @@ export async function generateSpeech(
   }
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      throw new AppError(
-        502,
-        "Dịch vụ tạo audio từ chối thông tin xác thực.",
-        "TTS_PROVIDER_AUTH_ERROR",
-      );
+    let detailStatus = "";
+    let detailMessage = "";
+    try {
+      const errBody = (await response.json()) as {
+        detail?: { status?: string; message?: string } | string;
+      };
+      if (typeof errBody.detail === "string") {
+        detailMessage = errBody.detail;
+      } else if (errBody.detail) {
+        detailStatus = errBody.detail.status ?? "";
+        detailMessage = errBody.detail.message ?? "";
+      }
+    } catch {
+      // Ignore non-JSON error body
     }
-    if (response.status === 402) {
+
+    if (
+      response.status === 402 ||
+      response.status === 404 ||
+      detailStatus === "paid_plan_required" ||
+      detailStatus === "free_users_not_allowed" ||
+      detailStatus === "voice_not_found"
+    ) {
+      if (detailStatus === "quota_exceeded" || detailMessage.toLowerCase().includes("quota")) {
+        throw new AppError(
+          429,
+          "API key ElevenLabs đã hết hạn mức token trong tháng.",
+          "TTS_QUOTA_EXCEEDED",
+        );
+      }
       throw new AppError(
         402,
-        "Giọng đọc đã chọn yêu cầu gói ElevenLabs trả phí. Hãy chọn giọng mặc định dùng được qua Free API.",
+        "Giọng đọc này yêu cầu gói trả phí trên ElevenLabs.",
         "TTS_PAID_VOICE_REQUIRED",
       );
     }
+
+    if (response.status === 401 || response.status === 403) {
+      if (detailStatus === "quota_exceeded") {
+        throw new AppError(
+          429,
+          "API key ElevenLabs đã hết hạn mức token.",
+          "TTS_QUOTA_EXCEEDED",
+        );
+      }
+      throw new AppError(
+        502,
+        detailStatus === "detected_unusual_activity"
+          ? "ElevenLabs tạm khóa Free API trên địa chỉ IP này."
+          : "Dịch vụ tạo audio từ chối API key.",
+        "TTS_PROVIDER_AUTH_ERROR",
+      );
+    }
+
     if (response.status === 429) {
       throw new AppError(
         429,
@@ -123,6 +194,7 @@ export async function generateSpeech(
         "TTS_QUOTA_EXCEEDED",
       );
     }
+
     throw new AppError(502, "Dịch vụ tạo audio đang gặp lỗi.", "TTS_PROVIDER_ERROR");
   }
 
@@ -146,24 +218,82 @@ export async function generateSpeech(
   return audio;
 }
 
+const resolvedVoiceByKeyCache = new Map<string, string>();
+
+export async function generateSpeech(
+  text: string,
+  config?: ElevenLabsConfig,
+): Promise<Buffer> {
+  if (!config) return generateSpeechFromKeyPool(text, "en");
+  if (!config.apiKey || !config.voiceId) {
+    throw new AppError(
+      503,
+      "Tính năng tạo audio AI chưa được cấu hình.",
+      "TTS_NOT_CONFIGURED",
+    );
+  }
+
+  const cachedVoice =
+    config.languageCode === "en" ? resolvedVoiceByKeyCache.get(config.apiKey) : undefined;
+  const initialConfig = cachedVoice ? { ...config, voiceId: cachedVoice } : config;
+
+  try {
+    return await callElevenLabsSpeechOnce(text, initialConfig);
+  } catch (error) {
+    // Free-tier key hit a Library/Paid-only voice: auto-switch to a Free premade voice!
+    if (
+      error instanceof AppError &&
+      error.code === "TTS_PAID_VOICE_REQUIRED" &&
+      config.languageCode === "en"
+    ) {
+      const fallbackVoiceId = await resolveFreeCompatibleVoiceId(
+        config.apiKey,
+        initialConfig.voiceId,
+      );
+      const audio = await callElevenLabsSpeechOnce(text, {
+        ...config,
+        voiceId: fallbackVoiceId,
+      });
+      resolvedVoiceByKeyCache.set(config.apiKey, fallbackVoiceId);
+      return audio;
+    }
+    throw error;
+  }
+}
+
+async function generateEnglishEdgeFallback(text: string): Promise<Buffer> {
+  return synthesizeEdgeNeuralSpeech(text, {
+    voice: env.ENGLISH_FALLBACK_EDGE_VOICE,
+    rate: env.ENGLISH_FALLBACK_EDGE_RATE,
+    timeoutMs: env.ELEVENLABS_TIMEOUT_MS,
+  });
+}
+
 let preferredElevenLabsKeyId: string | null = null;
 let seenConfigVersion = -1;
 
-async function generateSpeechFromKeyPool(text: string, language: "en" | "vi") {
+async function generateSpeechFromKeyPool(text: string, language: "en" | "vi"): Promise<Buffer> {
   const currentVersion = getElevenLabsConfigVersion();
   if (currentVersion !== seenConfigVersion) {
     preferredElevenLabsKeyId = null;
+    resolvedVoiceByKeyCache.clear();
     seenConfigVersion = currentVersion;
   }
+
   const keys = await getElevenLabsApiKeys();
   if (!keys.length) {
+    if (language === "en") {
+      return generateEnglishEdgeFallback(text);
+    }
     throw new AppError(503, "Tính năng tạo audio AI chưa được cấu hình.", "TTS_NOT_CONFIGURED");
   }
+
   const orderedKeys = [...keys].sort((a, b) => {
     if (a.id === preferredElevenLabsKeyId) return -1;
     if (b.id === preferredElevenLabsKeyId) return 1;
     return 0;
   });
+
   let lastError: unknown;
   for (const key of orderedKeys) {
     try {
@@ -179,10 +309,23 @@ async function generateSpeechFromKeyPool(text: string, language: "en" | "vi") {
         error instanceof AppError &&
         (error.code === "TTS_PROVIDER_AUTH_ERROR" ||
           error.code === "TTS_QUOTA_EXCEEDED" ||
-          error.code === "TTS_PAID_VOICE_REQUIRED");
-      if (!canRotate) throw error;
+          error.code === "TTS_PAID_VOICE_REQUIRED" ||
+          error.code === "TTS_PROVIDER_ERROR" ||
+          error.code === "TTS_TIMEOUT");
+      if (!canRotate) break;
     }
   }
+
+  // Automatic Free fallback: if ElevenLabs rejects Free keys (paid voice, IP block, quota, rate limit),
+  // seamlessly synthesize English with Microsoft Edge Neural TTS so Free users are never blocked.
+  if (language === "en") {
+    try {
+      return await generateEnglishEdgeFallback(text);
+    } catch {
+      // If fallback also fails, surface original ElevenLabs error below.
+    }
+  }
+
   throw lastError;
 }
 
@@ -308,10 +451,8 @@ function wait(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function generateSpeechWithQuotaRetry(
-  segment: ListeningLessonSegment,
-) {
-  const retryDelays = [2_500, 5_000];
+async function generateSpeechWithQuotaRetry(segment: ListeningLessonSegment) {
+  const retryDelays = [2_000, 4_000];
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await generateSpeechFromKeyPool(segment.text, segment.language);
@@ -334,11 +475,10 @@ async function combineLessonAudio(audioSegments: Buffer[]): Promise<Buffer> {
     await Promise.all(audioSegments.map((audio, index) => writeFile(paths[index], audio)));
     await new Promise<void>((resolve, reject) => {
       const pauseCount = Math.max(0, audioSegments.length - 1);
-      const audioFilters = audioSegments
-        .map(
-          (_, index) =>
-            `[${index}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[a${index}]`,
-        );
+      const audioFilters = audioSegments.map(
+        (_, index) =>
+          `[${index}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[a${index}]`,
+      );
       const pauseFilters = Array.from({ length: pauseCount }, (_, index) => {
         const inputIndex = audioSegments.length + index;
         return `[${inputIndex}:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[p${index}]`;
