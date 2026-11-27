@@ -167,7 +167,9 @@ async function generateSpeechFromKeyPool(text: string, language: "en" | "vi") {
       lastError = error;
       const canRotate =
         error instanceof AppError &&
-        (error.code === "TTS_PROVIDER_AUTH_ERROR" || error.code === "TTS_QUOTA_EXCEEDED");
+        (error.code === "TTS_PROVIDER_AUTH_ERROR" ||
+          error.code === "TTS_QUOTA_EXCEEDED" ||
+          error.code === "TTS_PAID_VOICE_REQUIRED");
       if (!canRotate) throw error;
     }
   }

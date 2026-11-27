@@ -17,6 +17,28 @@ export const AI_SETTING_KEYS = {
 
 type AiSettingName = (typeof AI_SETTING_KEYS)[keyof typeof AI_SETTING_KEYS];
 
+export type ElevenLabsQuotaInfo = {
+  valid: boolean;
+  account_id: string | null;
+  workspace_id: string | null;
+  tier: string | null;
+  status: string | null;
+  used: number | null;
+  limit: number | null;
+  remaining: number | null;
+  reset_at: string | null;
+  checked_at: string;
+  error: string | null;
+};
+
+export type ElevenLabsPoolKeyDto = {
+  id: string;
+  label: string;
+  enabled: boolean;
+  priority: number;
+  masked_key: string | null;
+};
+
 const encryptionKey = createHash("sha256")
   .update(env.JWT_REFRESH_SECRET)
   .update("toeic-vocabulary-ai-settings-v1")
@@ -112,78 +134,150 @@ export async function getElevenLabsApiKeys() {
   return candidates;
 }
 
-async function inspectElevenLabsKey(apiKey: string) {
+async function inspectElevenLabsKey(apiKey: string): Promise<ElevenLabsQuotaInfo> {
+  const checkedAt = new Date().toISOString();
   try {
     const headers = { "xi-api-key": apiKey };
     const [userResponse, subscriptionResponse] = await Promise.all([
       fetch(new URL("/v1/user", env.ELEVENLABS_API_BASE_URL), {
         headers,
         signal: AbortSignal.timeout(env.ELEVENLABS_TIMEOUT_MS),
-      }),
+      }).catch(() => null),
       fetch(new URL("/v1/user/subscription", env.ELEVENLABS_API_BASE_URL), {
         headers,
         signal: AbortSignal.timeout(env.ELEVENLABS_TIMEOUT_MS),
       }),
     ]);
-    if (!userResponse.ok || !subscriptionResponse.ok) {
-      return { valid: false, error: `ElevenLabs trả về ${userResponse.status || subscriptionResponse.status}.` };
+
+    if (!subscriptionResponse.ok) {
+      const errorMessage =
+        subscriptionResponse.status === 401 || subscriptionResponse.status === 403
+          ? "API key không hợp lệ hoặc chưa bật quyền đọc thông tin tài khoản (user_read)."
+          : `ElevenLabs trả về mã lỗi ${subscriptionResponse.status}.`;
+      return {
+        valid: false,
+        account_id: null,
+        workspace_id: null,
+        tier: null,
+        status: null,
+        used: null,
+        limit: null,
+        remaining: null,
+        reset_at: null,
+        checked_at: checkedAt,
+        error: errorMessage,
+      };
     }
-    const user = (await userResponse.json()) as { workspace_id?: string };
+
+    const user =
+      userResponse && userResponse.ok
+        ? ((await userResponse.json()) as {
+            workspace_id?: string;
+            user_id?: string;
+          })
+        : null;
     const subscription = (await subscriptionResponse.json()) as {
       tier?: string;
+      status?: string;
       character_count?: number;
       character_limit?: number;
+      next_character_count_reset_unix?: number | null;
     };
+
+    const used =
+      typeof subscription.character_count === "number"
+        ? subscription.character_count
+        : null;
+    const limit =
+      typeof subscription.character_limit === "number"
+        ? subscription.character_limit
+        : null;
+    const remaining =
+      used !== null && limit !== null ? Math.max(0, limit - used) : null;
+    const resetAt =
+      typeof subscription.next_character_count_reset_unix === "number" &&
+      subscription.next_character_count_reset_unix > 0
+        ? new Date(subscription.next_character_count_reset_unix * 1000).toISOString()
+        : null;
+    const workspaceId = user?.workspace_id ?? null;
+    const accountId = workspaceId
+      ? `ws:${workspaceId}`
+      : user?.user_id
+        ? `user:${user.user_id}`
+        : null;
+
     return {
       valid: true,
-      workspace_id: user.workspace_id ?? null,
+      account_id: accountId,
+      workspace_id: workspaceId,
       tier: subscription.tier ?? null,
-      used: subscription.character_count ?? null,
-      limit: subscription.character_limit ?? null,
-      remaining:
-        typeof subscription.character_count === "number" &&
-        typeof subscription.character_limit === "number"
-          ? Math.max(0, subscription.character_limit - subscription.character_count)
-          : null,
+      status: subscription.status ?? null,
+      used,
+      limit,
+      remaining,
+      reset_at: resetAt,
+      checked_at: checkedAt,
       error: null,
     };
   } catch {
-    return { valid: false, error: "Không thể kết nối ElevenLabs để kiểm tra key." };
+    return {
+      valid: false,
+      account_id: null,
+      workspace_id: null,
+      tier: null,
+      status: null,
+      used: null,
+      limit: null,
+      remaining: null,
+      reset_at: null,
+      checked_at: checkedAt,
+      error: "Không thể kết nối ElevenLabs để kiểm tra key.",
+    };
   }
 }
 
-export async function listElevenLabsKeys() {
+function toPoolKeyDto(key: StoredElevenLabsKey): ElevenLabsPoolKeyDto {
+  return {
+    id: key.id,
+    label: key.label,
+    enabled: key.enabled,
+    priority: key.priority,
+    masked_key: maskKey(key.apiKey),
+  };
+}
+
+export async function listElevenLabsKeys(): Promise<ElevenLabsPoolKeyDto[]> {
   const pool = (await readElevenLabsPool()).sort((a, b) => a.priority - b.priority);
-  return Promise.all(
-    pool.map(async (key) => ({
-      id: key.id,
-      label: key.label,
-      enabled: key.enabled,
-      priority: key.priority,
-      masked_key: maskKey(key.apiKey),
-      ...(await inspectElevenLabsKey(key.apiKey)),
-    })),
-  );
+  return pool.map(toPoolKeyDto);
 }
 
 export async function addElevenLabsKey(label: string, apiKey: string) {
-  const inspection = await inspectElevenLabsKey(apiKey);
-  if (!inspection.valid) {
-    throw new AppError(400, inspection.error ?? "ElevenLabs API key không hợp lệ.", "ELEVENLABS_KEY_INVALID");
-  }
   const pool = await readElevenLabsPool();
   if (pool.some((key) => key.apiKey === apiKey)) {
     throw new AppError(409, "API key này đã có trong danh sách.", "ELEVENLABS_KEY_EXISTS");
   }
+  const quota = await inspectElevenLabsKey(apiKey);
+  if (!quota.valid) {
+    throw new AppError(
+      400,
+      quota.error ?? "ElevenLabs API key không hợp lệ.",
+      "ELEVENLABS_KEY_INVALID",
+    );
+  }
+  const addedId = randomUUID();
   pool.push({
-    id: randomUUID(),
+    id: addedId,
     label,
     apiKey,
     enabled: true,
     priority: pool.length + 1,
   });
   await writeElevenLabsPool(pool);
-  return listElevenLabsKeys();
+  return {
+    keys: pool.sort((a, b) => a.priority - b.priority).map(toPoolKeyDto),
+    addedId,
+    quota,
+  };
 }
 
 export async function updateElevenLabsKey(
@@ -196,7 +290,7 @@ export async function updateElevenLabsKey(
   if (values.label !== undefined) key.label = values.label;
   if (values.enabled !== undefined) key.enabled = values.enabled;
   await writeElevenLabsPool(pool);
-  return listElevenLabsKeys();
+  return pool.sort((a, b) => a.priority - b.priority).map(toPoolKeyDto);
 }
 
 export async function deleteElevenLabsKey(id: string) {
@@ -208,6 +302,99 @@ export async function deleteElevenLabsKey(id: string) {
   await writeElevenLabsPool(
     nextPool.map((key, index) => ({ ...key, priority: index + 1 })),
   );
+}
+
+export async function checkDefaultElevenLabsKey() {
+  const defaultKey = await getProviderApiKey(
+    AI_SETTING_KEYS.elevenlabs,
+    env.ELEVENLABS_API_KEY,
+  );
+  if (!defaultKey) {
+    throw new AppError(
+      400,
+      "Key mặc định của ElevenLabs chưa được cấu hình.",
+      "ELEVENLABS_DEFAULT_NOT_CONFIGURED",
+    );
+  }
+  const quota = await inspectElevenLabsKey(defaultKey);
+  return { quota };
+}
+
+export async function checkPoolElevenLabsKey(id: string) {
+  const pool = await readElevenLabsPool();
+  const key = pool.find((item) => item.id === id);
+  if (!key) {
+    throw new AppError(404, "Không tìm thấy API key.", "ELEVENLABS_KEY_NOT_FOUND");
+  }
+  const quota = await inspectElevenLabsKey(key.apiKey);
+  return { id: key.id, quota };
+}
+
+export async function checkAllElevenLabsKeys() {
+  const [defaultKey, pool] = await Promise.all([
+    getProviderApiKey(AI_SETTING_KEYS.elevenlabs, env.ELEVENLABS_API_KEY),
+    readElevenLabsPool(),
+  ]);
+  const sortedPool = pool.sort((a, b) => a.priority - b.priority);
+
+  const [defaultQuota, poolResults] = await Promise.all([
+    defaultKey ? inspectElevenLabsKey(defaultKey) : Promise.resolve(null),
+    Promise.all(
+      sortedPool.map(async (key) => ({
+        key,
+        quota: await inspectElevenLabsKey(key.apiKey),
+      })),
+    ),
+  ]);
+
+  const keyQuotas: Record<string, ElevenLabsQuotaInfo> = {};
+  for (const item of poolResults) {
+    keyQuotas[item.key.id] = item.quota;
+  }
+
+  const seenAccounts = new Set<string>();
+  const seenRawKeys = new Set<string>();
+  let totalRemaining = 0;
+  let totalLimit = 0;
+  let totalUsed = 0;
+  let activeKeyCount = 0;
+
+  function accumulateActiveKey(rawApiKey: string, quota: ElevenLabsQuotaInfo) {
+    if (!quota.valid) return;
+    if (seenRawKeys.has(rawApiKey)) return;
+    seenRawKeys.add(rawApiKey);
+    activeKeyCount += 1;
+
+    const dedupeId = quota.account_id ?? `raw:${rawApiKey}`;
+    if (seenAccounts.has(dedupeId)) return;
+    seenAccounts.add(dedupeId);
+
+    if (typeof quota.remaining === "number") totalRemaining += quota.remaining;
+    if (typeof quota.limit === "number") totalLimit += quota.limit;
+    if (typeof quota.used === "number") totalUsed += quota.used;
+  }
+
+  if (defaultKey && defaultQuota) {
+    accumulateActiveKey(defaultKey, defaultQuota);
+  }
+  for (const { key, quota } of poolResults) {
+    if (key.enabled) {
+      accumulateActiveKey(key.apiKey, quota);
+    }
+  }
+
+  return {
+    defaultQuota,
+    keyQuotas,
+    summary: {
+      total_remaining: totalRemaining,
+      total_limit: totalLimit,
+      total_used: totalUsed,
+      active_key_count: activeKeyCount,
+      unique_account_count: seenAccounts.size,
+      checked_at: new Date().toISOString(),
+    },
+  };
 }
 
 async function providerStatus(name: AiSettingName, fallback: string) {

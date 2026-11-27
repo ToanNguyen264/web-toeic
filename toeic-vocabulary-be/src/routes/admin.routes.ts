@@ -3,11 +3,14 @@ import { z } from "zod";
 import { requireAdmin, requireAuth } from "../middleware/auth.middleware.js";
 import {
   addElevenLabsKey,
+  checkAllElevenLabsKeys,
+  checkDefaultElevenLabsKey,
+  checkPoolElevenLabsKey,
   deleteElevenLabsKey,
   getAiSettingsStatus,
   listElevenLabsKeys,
-  updateElevenLabsKey,
   updateAiSettings,
+  updateElevenLabsKey,
 } from "../services/app-settings.service.js";
 
 const updateAiSettingsSchema = z
@@ -53,7 +56,7 @@ adminRouter.get("/elevenlabs-keys", async (_req, res) => {
 
 adminRouter.post("/elevenlabs-keys", async (req, res) => {
   const values = addElevenLabsKeySchema.parse(req.body);
-  res.status(201).json({ keys: await addElevenLabsKey(values.label, values.apiKey) });
+  res.status(201).json(await addElevenLabsKey(values.label, values.apiKey));
 });
 
 adminRouter.patch("/elevenlabs-keys/:id", async (req, res) => {
@@ -66,4 +69,17 @@ adminRouter.delete("/elevenlabs-keys/:id", async (req, res) => {
   const { id } = keyParamsSchema.parse(req.params);
   await deleteElevenLabsKey(id);
   res.status(204).send();
+});
+
+adminRouter.post("/elevenlabs-default/check", async (_req, res) => {
+  res.json(await checkDefaultElevenLabsKey());
+});
+
+adminRouter.post("/elevenlabs-keys/:id/check", async (req, res) => {
+  const { id } = keyParamsSchema.parse(req.params);
+  res.json(await checkPoolElevenLabsKey(id));
+});
+
+adminRouter.post("/elevenlabs-check-all", async (_req, res) => {
+  res.json(await checkAllElevenLabsKeys());
 });

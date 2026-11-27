@@ -171,6 +171,37 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /admin/elevenlabs-default/check:
+    post:
+      tags: [Admin]
+      summary: Kiểm tra số dư token còn lại của ElevenLabs API key mặc định
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Thông tin quota hiện tại của key mặc định }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /admin/elevenlabs-keys/{id}/check:
+    post:
+      tags: [Admin]
+      summary: Kiểm tra số dư token còn lại của một ElevenLabs API key trong kho
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Thông tin quota hiện tại của key được chọn }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/elevenlabs-check-all:
+    post:
+      tags: [Admin]
+      summary: Kiểm tra toàn bộ ElevenLabs API key và tính tổng token khả dụng (khử trùng theo tài khoản/workspace)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: Kết quả kiểm tra chi tiết từng key và tổng số dư khả dụng }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /vocabularies:
     get:
       tags: [Vocabularies]
