@@ -617,9 +617,9 @@ export default function FlashcardPage() {
           onRestartSameDeck={handleRestartSameDeck}
         />
       ) : currentCard ? (
-        <div>
-          <div className="mx-auto mb-3.5 max-w-3xl sm:mb-4">
-            <div className="mb-2 flex items-center justify-between gap-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+        <div className="w-full min-w-0">
+          <div className="mx-auto mb-2.5 w-full max-w-3xl min-w-0 sm:mb-4">
+            <div className="mb-1.5 flex min-w-0 items-center justify-between gap-2 text-[11px] font-bold text-slate-500 sm:mb-2 sm:text-xs dark:text-slate-400">
               <span className="min-w-0 truncate">
                 Thẻ {safeIndex + 1} / {sessionDeck.length}
                 <span className="hidden sm:inline">
@@ -630,7 +630,7 @@ export default function FlashcardPage() {
                 Đã chấm {Object.keys(sessionGrades).length}/{sessionDeck.length}
               </span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800">
+            <div className="h-1.5 overflow-hidden rounded-full bg-slate-200/80 sm:h-2 dark:bg-slate-800">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-indigo-600 via-violet-600 to-cyan-500 transition-all duration-300"
                 style={{ width: `${progressPercent}%` }}
