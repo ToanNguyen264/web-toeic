@@ -10,6 +10,7 @@ import {
   Play,
   RotateCw,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import type { MasteryLevel, Vocabulary } from "../../types/vocabulary";
 
@@ -23,6 +24,7 @@ type FlashcardCardProps = {
   loadingKind: "word" | "example" | null;
   failedKind: "word" | "example" | null;
   onPlayAudio: (kind: "word" | "example") => void;
+  onDelete: () => void;
   sessionGrade?: MasteryLevel;
 };
 
@@ -75,6 +77,7 @@ export function FlashcardCard({
   loadingKind,
   failedKind,
   onPlayAudio,
+  onDelete,
   sessionGrade,
 }: FlashcardCardProps) {
   const badge = MASTERY_BADGES[card.mastery_level];
@@ -129,21 +132,35 @@ export function FlashcardCard({
               )}
             </div>
 
-            <span
-              className={`inline-flex min-w-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold sm:gap-1.5 sm:px-3 sm:py-1 sm:text-xs ${
-                reviewInfo.isNew
-                  ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300"
-                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-              }`}
-            >
-              {reviewInfo.isNew ? (
-                <Sparkles className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
-              ) : (
-                <Clock className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
-              )}
-              <span className="truncate sm:hidden">{reviewInfo.shortText}</span>
-              <span className="hidden truncate sm:inline">{reviewInfo.text}</span>
-            </span>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span
+                className={`inline-flex min-w-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold sm:gap-1.5 sm:px-3 sm:py-1 sm:text-xs ${
+                  reviewInfo.isNew
+                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300"
+                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                }`}
+              >
+                {reviewInfo.isNew ? (
+                  <Sparkles className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
+                ) : (
+                  <Clock className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
+                )}
+                <span className="truncate sm:hidden">{reviewInfo.shortText}</span>
+                <span className="hidden truncate sm:inline">{reviewInfo.text}</span>
+              </span>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete();
+                }}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 sm:h-8 sm:w-8 sm:rounded-xl dark:text-slate-500 dark:hover:bg-rose-950/70 dark:hover:text-rose-300"
+                aria-label={`Xóa vĩnh viễn ${card.english_word}`}
+                title="Xóa vĩnh viễn từ này"
+              >
+                <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </button>
+            </div>
           </div>
 
           <div className="my-4 flex min-w-0 flex-col items-center justify-center text-center sm:my-8">
@@ -240,11 +257,25 @@ export function FlashcardCard({
               )}
             </div>
 
-            <span
-              className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold sm:px-3 sm:py-1 sm:text-xs ${badge.className}`}
-            >
-              {badge.label}
-            </span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span
+                className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold sm:px-3 sm:py-1 sm:text-xs ${badge.className}`}
+              >
+                {badge.label}
+              </span>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete();
+                }}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 sm:h-8 sm:w-8 sm:rounded-xl dark:text-slate-500 dark:hover:bg-rose-950/70 dark:hover:text-rose-300"
+                aria-label={`Xóa vĩnh viễn ${card.english_word}`}
+                title="Xóa vĩnh viễn từ này"
+              >
+                <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              </button>
+            </div>
           </div>
 
           <div className="my-4 flex min-w-0 flex-col items-center justify-center text-center sm:my-6">

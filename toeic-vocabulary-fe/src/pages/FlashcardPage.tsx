@@ -11,10 +11,15 @@ import {
 } from "../components/flashcard/FlashcardToolbar";
 import { AppShell } from "../components/layout/AppShell";
 import { Button } from "../components/ui/Button";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useAuth } from "../hooks/useAuth";
 import { useFlashcardPool } from "../hooks/useFlashcardPool";
 import { useToast } from "../hooks/useToast";
-import { getAudioUrl, reviewVocabulary } from "../services/vocabulary.service";
+import {
+  deleteVocabulary,
+  getAudioUrl,
+  reviewVocabulary,
+} from "../services/vocabulary.service";
 import type {
   MasteryLevel,
   Vocabulary,
@@ -67,6 +72,8 @@ export default function FlashcardPage() {
   const [completed, setCompleted] = useState(false);
   const [reviewSubsetIds, setReviewSubsetIds] = useState<string[] | null>(null);
   const [cardOverrides, setCardOverrides] = useState<Record<string, Vocabulary>>({});
+  const [deletedIds, setDeletedIds] = useState<Record<string, true>>({});
+  const [pendingDelete, setPendingDelete] = useState<Vocabulary | null>(null);
   const [sessionGrades, setSessionGrades] = useState<Record<string, MasteryLevel>>({});
   const [statsDelta, setStatsDelta] = useState({
     unlearned: 0,
@@ -116,6 +123,7 @@ export default function FlashcardPage() {
         setCompleted(false);
         setReviewSubsetIds(null);
         setCardOverrides({});
+        setDeletedIds({});
         setSessionGrades({});
         setStatsDelta({ unlearned: 0, learning: 0, mastered: 0 });
       }
@@ -163,9 +171,12 @@ export default function FlashcardPage() {
       ? seededShuffle(baseSlice, shuffleSeed || 1)
       : baseSlice;
 
-    return ordered.map((item) => cardOverrides[item.id] ?? item);
+    return ordered
+      .filter((item) => !deletedIds[item.id])
+      .map((item) => cardOverrides[item.id] ?? item);
   }, [
     poolQuery.data?.items,
+    deletedIds,
     reviewSubsetIds,
     deckSize,
     shuffleEnabled,
@@ -290,6 +301,13 @@ export default function FlashcardPage() {
       reviewVocabulary(id, masteryLevel),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (vocabulary: Vocabulary) => {
+      if (!user) throw new Error("Phiên đăng nhập không hợp lệ.");
+      await deleteVocabulary(user.id, vocabulary);
+    },
+  });
+
   function advanceAfterAction() {
     stopAudio();
     setFlipped(false);
@@ -367,11 +385,69 @@ export default function FlashcardPage() {
     }
   }
 
+  async function handleConfirmDelete() {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    stopAudio();
+
+    try {
+      await deleteMutation.mutateAsync(target);
+
+      for (const suffix of ["word", "example"] as const) {
+        const cacheKey = `${target.id}:${suffix}`;
+        const cachedUrl = audioCacheRef.current.get(cacheKey);
+        if (cachedUrl) {
+          URL.revokeObjectURL(cachedUrl);
+          audioCacheRef.current.delete(cacheKey);
+        }
+      }
+
+      const remainingCount = sessionDeck.length - 1;
+      const hadOtherGrades = Object.keys(sessionGrades).some((id) => id !== target.id);
+
+      setDeletedIds((prev) => ({ ...prev, [target.id]: true }));
+      setSessionGrades((prev) => {
+        if (!(target.id in prev)) return prev;
+        const next = { ...prev };
+        delete next[target.id];
+        return next;
+      });
+      setStatsDelta((prev) => ({
+        ...prev,
+        [target.mastery_level]: prev[target.mastery_level] - 1,
+      }));
+      setFlipped(false);
+      setExampleOpen(false);
+      setPendingDelete(null);
+
+      if (remainingCount <= 0) {
+        setReviewSubsetIds(null);
+        setCardOverrides({});
+        setDeletedIds({});
+        setStatsDelta({ unlearned: 0, learning: 0, mastered: 0 });
+        setRoundSeed((seed) => seed + 1);
+        resetSessionCursor(true);
+      } else if (safeIndex >= remainingCount) {
+        if (hadOtherGrades) {
+          setCompleted(true);
+        } else {
+          setCurrentIndex(remainingCount - 1);
+        }
+      }
+
+      void queryClient.invalidateQueries({ queryKey: ["vocabularies", user?.id] });
+      showToast(`Đã xóa vĩnh viễn “${target.english_word}”.`, "success");
+    } catch (error) {
+      showToast(toUserMessage(error, "Không thể xóa từ vựng."), "error");
+    }
+  }
+
   function handleStatusChange(nextStatus: VocabularyStatus) {
     if (nextStatus === status) return;
     setStatus(nextStatus);
     setReviewSubsetIds(null);
     setCardOverrides({});
+    setDeletedIds({});
     setStatsDelta({ unlearned: 0, learning: 0, mastered: 0 });
     resetSessionCursor(true);
   }
@@ -407,6 +483,7 @@ export default function FlashcardPage() {
   function startFreshPriorityBatch() {
     setReviewSubsetIds(null);
     setCardOverrides({});
+    setDeletedIds({});
     setStatsDelta({ unlearned: 0, learning: 0, mastered: 0 });
     if (shuffleEnabled) setShuffleSeed((seed) => seed + 1);
     setRoundSeed((seed) => seed + 1);
@@ -648,6 +725,10 @@ export default function FlashcardPage() {
             loadingKind={loadingKind}
             failedKind={failedKind}
             onPlayAudio={(kind) => void handlePlayAudio(kind)}
+            onDelete={() => {
+              stopAudio();
+              setPendingDelete(currentCard);
+            }}
             sessionGrade={sessionGrades[currentCard.id]}
           />
 
@@ -666,6 +747,17 @@ export default function FlashcardPage() {
           />
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Xóa vĩnh viễn từ vựng?"
+        description={`“${pendingDelete?.english_word ?? "Từ này"}” và toàn bộ audio đi kèm sẽ bị xóa vĩnh viễn khỏi kho từ vựng của bạn. Thao tác này không thể hoàn tác.`}
+        loading={deleteMutation.isPending}
+        onConfirm={() => void handleConfirmDelete()}
+        onClose={() => {
+          if (!deleteMutation.isPending) setPendingDelete(null);
+        }}
+      />
     </AppShell>
   );
 }
