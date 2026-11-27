@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { env } from "../config/env.js";
 import { AppError } from "../errors/AppError.js";
-import { getElevenLabsApiKeys } from "./app-settings.service.js";
+import {
+  getElevenLabsApiKeys,
+  getElevenLabsConfigVersion,
+} from "./app-settings.service.js";
 
 const MAX_GENERATED_AUDIO_BYTES = 5 * 1024 * 1024;
 
@@ -143,8 +146,14 @@ export async function generateSpeech(
 }
 
 let preferredElevenLabsKeyId: string | null = null;
+let seenConfigVersion = -1;
 
 async function generateSpeechFromKeyPool(text: string, language: "en" | "vi") {
+  const currentVersion = getElevenLabsConfigVersion();
+  if (currentVersion !== seenConfigVersion) {
+    preferredElevenLabsKeyId = null;
+    seenConfigVersion = currentVersion;
+  }
   const keys = await getElevenLabsApiKeys();
   if (!keys.length) {
     throw new AppError(503, "Tính năng tạo audio AI chưa được cấu hình.", "TTS_NOT_CONFIGURED");

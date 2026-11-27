@@ -167,7 +167,19 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
-        "204": { description: Đã xóa key }
+        "200": { description: Danh sách key và trạng thái sau khi xóa }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/elevenlabs-keys/{id}/activate:
+    post:
+      tags: [Admin]
+      summary: Đặt một ElevenLabs API key trong kho làm key đang dùng chính
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Trạng thái cấu hình và danh sách key sau khi kích hoạt }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }

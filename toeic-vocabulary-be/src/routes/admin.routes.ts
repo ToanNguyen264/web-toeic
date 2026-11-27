@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAdmin, requireAuth } from "../middleware/auth.middleware.js";
 import {
+  activateElevenLabsKey,
   addElevenLabsKey,
   checkAllElevenLabsKeys,
   checkDefaultElevenLabsKey,
@@ -59,16 +60,20 @@ adminRouter.post("/elevenlabs-keys", async (req, res) => {
   res.status(201).json(await addElevenLabsKey(values.label, values.apiKey));
 });
 
+adminRouter.post("/elevenlabs-keys/:id/activate", async (req, res) => {
+  const { id } = keyParamsSchema.parse(req.params);
+  res.json(await activateElevenLabsKey(id));
+});
+
 adminRouter.patch("/elevenlabs-keys/:id", async (req, res) => {
   const { id } = keyParamsSchema.parse(req.params);
   const values = updateElevenLabsKeySchema.parse(req.body);
-  res.json({ keys: await updateElevenLabsKey(id, values) });
+  res.json(await updateElevenLabsKey(id, values));
 });
 
 adminRouter.delete("/elevenlabs-keys/:id", async (req, res) => {
   const { id } = keyParamsSchema.parse(req.params);
-  await deleteElevenLabsKey(id);
-  res.status(204).send();
+  res.json(await deleteElevenLabsKey(id));
 });
 
 adminRouter.post("/elevenlabs-default/check", async (_req, res) => {

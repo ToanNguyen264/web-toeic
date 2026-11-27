@@ -35,9 +35,20 @@ export type ElevenLabsPoolKeyDto = {
   id: string;
   label: string;
   enabled: boolean;
+  is_primary: boolean;
   priority: number;
   masked_key: string | null;
 };
+
+let elevenLabsConfigVersion = 0;
+
+export function getElevenLabsConfigVersion() {
+  return elevenLabsConfigVersion;
+}
+
+function bumpElevenLabsConfigVersion() {
+  elevenLabsConfigVersion += 1;
+}
 
 const encryptionKey = createHash("sha256")
   .update(env.JWT_REFRESH_SECRET)
@@ -81,6 +92,19 @@ export async function getProviderApiKey(name: AiSettingName, fallback: string) {
   return setting ? decrypt(setting) : fallback;
 }
 
+async function setPrimaryElevenLabsKeyInDb(apiKey: string | null) {
+  if (!apiKey) {
+    await prisma.appSetting.deleteMany({ where: { key: AI_SETTING_KEYS.elevenlabs } });
+    return;
+  }
+  const encrypted = encrypt(apiKey);
+  await prisma.appSetting.upsert({
+    where: { key: AI_SETTING_KEYS.elevenlabs },
+    create: { key: AI_SETTING_KEYS.elevenlabs, ...encrypted },
+    update: encrypted,
+  });
+}
+
 function maskKey(value: string) {
   if (!value) return null;
   const visible = value.slice(-4);
@@ -118,15 +142,22 @@ async function writeElevenLabsPool(keys: StoredElevenLabsKey[]) {
 }
 
 export async function getElevenLabsApiKeys() {
-  const pool = (await readElevenLabsPool())
+  const pool = await readElevenLabsPool();
+  const disabledRawKeys = new Set(
+    pool.filter((key) => !key.enabled).map((key) => key.apiKey),
+  );
+  const enabledPool = pool
     .filter((key) => key.enabled)
     .sort((a, b) => a.priority - b.priority);
   const legacyKey = await getProviderApiKey(
     AI_SETTING_KEYS.elevenlabs,
     env.ELEVENLABS_API_KEY,
   );
-  const candidates = legacyKey ? [{ id: "legacy", apiKey: legacyKey }] : [];
-  for (const key of pool) {
+  const candidates =
+    legacyKey && !disabledRawKeys.has(legacyKey)
+      ? [{ id: "legacy", apiKey: legacyKey }]
+      : [];
+  for (const key of enabledPool) {
     if (!candidates.some((candidate) => candidate.apiKey === key.apiKey)) {
       candidates.push({ id: key.id, apiKey: key.apiKey });
     }
@@ -236,19 +267,41 @@ async function inspectElevenLabsKey(apiKey: string): Promise<ElevenLabsQuotaInfo
   }
 }
 
-function toPoolKeyDto(key: StoredElevenLabsKey): ElevenLabsPoolKeyDto {
+function toPoolKeyDto(
+  key: StoredElevenLabsKey,
+  activePrimaryKey: string,
+): ElevenLabsPoolKeyDto {
   return {
     id: key.id,
     label: key.label,
     enabled: key.enabled,
+    is_primary: Boolean(activePrimaryKey) && key.enabled && key.apiKey === activePrimaryKey,
     priority: key.priority,
     masked_key: maskKey(key.apiKey),
   };
 }
 
+async function resolveEffectivePrimaryKey(pool: StoredElevenLabsKey[]) {
+  const disabledRawKeys = new Set(
+    pool.filter((key) => !key.enabled).map((key) => key.apiKey),
+  );
+  const rawPrimary = await getProviderApiKey(
+    AI_SETTING_KEYS.elevenlabs,
+    env.ELEVENLABS_API_KEY,
+  );
+  if (rawPrimary && !disabledRawKeys.has(rawPrimary)) {
+    return rawPrimary;
+  }
+  const firstEnabled = [...pool]
+    .filter((key) => key.enabled)
+    .sort((a, b) => a.priority - b.priority)[0];
+  return firstEnabled?.apiKey ?? "";
+}
+
 export async function listElevenLabsKeys(): Promise<ElevenLabsPoolKeyDto[]> {
   const pool = (await readElevenLabsPool()).sort((a, b) => a.priority - b.priority);
-  return pool.map(toPoolKeyDto);
+  const activePrimary = await resolveEffectivePrimaryKey(pool);
+  return pool.map((key) => toPoolKeyDto(key, activePrimary));
 }
 
 export async function addElevenLabsKey(label: string, apiKey: string) {
@@ -273,11 +326,43 @@ export async function addElevenLabsKey(label: string, apiKey: string) {
     priority: pool.length + 1,
   });
   await writeElevenLabsPool(pool);
+
+  const currentPrimary = await resolveEffectivePrimaryKey(pool);
+  if (!currentPrimary) {
+    await setPrimaryElevenLabsKeyInDb(apiKey);
+  }
+  bumpElevenLabsConfigVersion();
+
+  const [keys, settings] = await Promise.all([
+    listElevenLabsKeys(),
+    getAiSettingsStatus(),
+  ]);
   return {
-    keys: pool.sort((a, b) => a.priority - b.priority).map(toPoolKeyDto),
+    keys,
+    settings,
     addedId,
     quota,
   };
+}
+
+export async function activateElevenLabsKey(id: string) {
+  const pool = await readElevenLabsPool();
+  const key = pool.find((item) => item.id === id);
+  if (!key) {
+    throw new AppError(404, "Không tìm thấy API key.", "ELEVENLABS_KEY_NOT_FOUND");
+  }
+  if (!key.enabled) {
+    key.enabled = true;
+    await writeElevenLabsPool(pool);
+  }
+  await setPrimaryElevenLabsKeyInDb(key.apiKey);
+  bumpElevenLabsConfigVersion();
+
+  const [keys, settings] = await Promise.all([
+    listElevenLabsKeys(),
+    getAiSettingsStatus(),
+  ]);
+  return { keys, settings };
 }
 
 export async function updateElevenLabsKey(
@@ -290,33 +375,65 @@ export async function updateElevenLabsKey(
   if (values.label !== undefined) key.label = values.label;
   if (values.enabled !== undefined) key.enabled = values.enabled;
   await writeElevenLabsPool(pool);
-  return pool.sort((a, b) => a.priority - b.priority).map(toPoolKeyDto);
+
+  if (values.enabled === false) {
+    const dbPrimary = await prisma.appSetting.findUnique({
+      where: { key: AI_SETTING_KEYS.elevenlabs },
+    });
+    if (dbPrimary && decrypt(dbPrimary) === key.apiKey) {
+      const nextEnabled = [...pool]
+        .filter((item) => item.enabled)
+        .sort((a, b) => a.priority - b.priority)[0];
+      await setPrimaryElevenLabsKeyInDb(nextEnabled?.apiKey ?? null);
+    }
+  }
+  bumpElevenLabsConfigVersion();
+
+  const [keys, settings] = await Promise.all([
+    listElevenLabsKeys(),
+    getAiSettingsStatus(),
+  ]);
+  return { keys, settings };
 }
 
 export async function deleteElevenLabsKey(id: string) {
   const pool = await readElevenLabsPool();
-  const nextPool = pool.filter((key) => key.id !== id);
-  if (nextPool.length === pool.length) {
+  const removedKey = pool.find((key) => key.id === id);
+  if (!removedKey) {
     throw new AppError(404, "Không tìm thấy API key.", "ELEVENLABS_KEY_NOT_FOUND");
   }
-  await writeElevenLabsPool(
-    nextPool.map((key, index) => ({ ...key, priority: index + 1 })),
-  );
+  const nextPool = pool
+    .filter((key) => key.id !== id)
+    .map((key, index) => ({ ...key, priority: index + 1 }));
+  await writeElevenLabsPool(nextPool);
+
+  const dbPrimary = await prisma.appSetting.findUnique({
+    where: { key: AI_SETTING_KEYS.elevenlabs },
+  });
+  if (dbPrimary && decrypt(dbPrimary) === removedKey.apiKey) {
+    const nextEnabled = nextPool.find((item) => item.enabled);
+    await setPrimaryElevenLabsKeyInDb(nextEnabled?.apiKey ?? null);
+  }
+  bumpElevenLabsConfigVersion();
+
+  const [keys, settings] = await Promise.all([
+    listElevenLabsKeys(),
+    getAiSettingsStatus(),
+  ]);
+  return { keys, settings };
 }
 
 export async function checkDefaultElevenLabsKey() {
-  const defaultKey = await getProviderApiKey(
-    AI_SETTING_KEYS.elevenlabs,
-    env.ELEVENLABS_API_KEY,
-  );
-  if (!defaultKey) {
+  const pool = await readElevenLabsPool();
+  const effectiveKey = await resolveEffectivePrimaryKey(pool);
+  if (!effectiveKey) {
     throw new AppError(
       400,
-      "Key mặc định của ElevenLabs chưa được cấu hình.",
+      "Hiện chưa có ElevenLabs API key nào đang bật để kiểm tra.",
       "ELEVENLABS_DEFAULT_NOT_CONFIGURED",
     );
   }
-  const quota = await inspectElevenLabsKey(defaultKey);
+  const quota = await inspectElevenLabsKey(effectiveKey);
   return { quota };
 }
 
@@ -331,16 +448,18 @@ export async function checkPoolElevenLabsKey(id: string) {
 }
 
 export async function checkAllElevenLabsKeys() {
-  const [defaultKey, pool] = await Promise.all([
-    getProviderApiKey(AI_SETTING_KEYS.elevenlabs, env.ELEVENLABS_API_KEY),
-    readElevenLabsPool(),
-  ]);
-  const sortedPool = pool.sort((a, b) => a.priority - b.priority);
+  const pool = (await readElevenLabsPool()).sort((a, b) => a.priority - b.priority);
+  const effectivePrimaryKey = await resolveEffectivePrimaryKey(pool);
+  const primaryMatchesPoolKey = pool.find(
+    (item) => item.apiKey === effectivePrimaryKey,
+  );
 
-  const [defaultQuota, poolResults] = await Promise.all([
-    defaultKey ? inspectElevenLabsKey(defaultKey) : Promise.resolve(null),
+  const [standalonePrimaryQuota, poolResults] = await Promise.all([
+    effectivePrimaryKey && !primaryMatchesPoolKey
+      ? inspectElevenLabsKey(effectivePrimaryKey)
+      : Promise.resolve(null),
     Promise.all(
-      sortedPool.map(async (key) => ({
+      pool.map(async (key) => ({
         key,
         quota: await inspectElevenLabsKey(key.apiKey),
       })),
@@ -351,6 +470,10 @@ export async function checkAllElevenLabsKeys() {
   for (const item of poolResults) {
     keyQuotas[item.key.id] = item.quota;
   }
+
+  const defaultQuota = primaryMatchesPoolKey
+    ? (keyQuotas[primaryMatchesPoolKey.id] ?? null)
+    : standalonePrimaryQuota;
 
   const seenAccounts = new Set<string>();
   const seenRawKeys = new Set<string>();
@@ -374,8 +497,8 @@ export async function checkAllElevenLabsKeys() {
     if (typeof quota.used === "number") totalUsed += quota.used;
   }
 
-  if (defaultKey && defaultQuota) {
-    accumulateActiveKey(defaultKey, defaultQuota);
+  if (effectivePrimaryKey && defaultQuota) {
+    accumulateActiveKey(effectivePrimaryKey, defaultQuota);
   }
   for (const { key, quota } of poolResults) {
     if (key.enabled) {
@@ -397,12 +520,32 @@ export async function checkAllElevenLabsKeys() {
   };
 }
 
+async function elevenLabsStatus() {
+  const [setting, pool] = await Promise.all([
+    prisma.appSetting.findUnique({ where: { key: AI_SETTING_KEYS.elevenlabs } }),
+    readElevenLabsPool(),
+  ]);
+  const effectiveValue = await resolveEffectivePrimaryKey(pool);
+  const matchedPoolKey = effectiveValue
+    ? pool.find((item) => item.enabled && item.apiKey === effectiveValue)
+    : undefined;
+  return {
+    configured: Boolean(effectiveValue),
+    masked_key: maskKey(effectiveValue),
+    active_label: matchedPoolKey?.label ?? null,
+    source:
+      setting || matchedPoolKey ? ("database" as const) : ("environment" as const),
+    updated_at: setting?.updatedAt.toISOString() ?? null,
+  };
+}
+
 async function providerStatus(name: AiSettingName, fallback: string) {
   const setting = await prisma.appSetting.findUnique({ where: { key: name } });
   const value = setting ? decrypt(setting) : fallback;
   return {
     configured: Boolean(value),
     masked_key: maskKey(value),
+    active_label: null as string | null,
     source: setting ? ("database" as const) : ("environment" as const),
     updated_at: setting?.updatedAt.toISOString() ?? null,
   };
@@ -410,7 +553,7 @@ async function providerStatus(name: AiSettingName, fallback: string) {
 
 export async function getAiSettingsStatus() {
   const [elevenlabs, gemini] = await Promise.all([
-    providerStatus(AI_SETTING_KEYS.elevenlabs, env.ELEVENLABS_API_KEY),
+    elevenLabsStatus(),
     providerStatus(AI_SETTING_KEYS.gemini, env.GEMINI_API_KEY),
   ]);
   return { elevenlabs, gemini };
@@ -438,6 +581,7 @@ export async function updateAiSettings(values: {
       });
     }),
   );
+  if (values.elevenlabsApiKey) bumpElevenLabsConfigVersion();
 
   return getAiSettingsStatus();
 }
